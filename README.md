@@ -1,6 +1,43 @@
- # Q-Guardian OS — Technical Documentation & System Architecture
+# ⚡ Q-Guardian OS — AI Security Operations Center
+### HackIndia 2026 Submission — Track 04 (Stateful AI Agents with Dynamic UI)
 
-Q-Guardian OS is an **AI Investigation Operating System** designed for high-performance security operations. It replaces traditional, fragmented dashboards and static text chatbots with a stateful, real-time workspace that dynamically compiles and recomposes containment interfaces based on live machine learning alert telemetry and analyst feedback.
+> 🚀 **Working Live Demo**: [https://Rishini-Dharan.github.io/HackIndia2026/](https://Rishini-Dharan.github.io/HackIndia2026/)
+> 
+> *Experience the complete dynamic AI interface directly in your browser. The application includes a fully interactive client-side sandbox mode fallback that replicates all backend telemetry and intelligence structures!*
+
+---
+
+## 🎮 Jury Walkthrough Guide (How to Experience the App)
+
+To make it as easy as possible for the judges to comprehend the full power of Q-Guardian OS, we have built a **Jury Walkthrough & Demo Guide** directly into the sidebar of the live link:
+
+1. **Step 1: Trigger Attack** 
+   - *Action*: Click `1. Trigger Attack` in the sidebar.
+   - *Result*: Real-time packet telemetry spikes on the Traffic Monitor, a ransomware alert flashes, and the workspace dynamically morphs into split-screen mode to mount the **Threat Topology** and **Containment Rules** widgets.
+2. **Step 2: View Triage Board**
+   - *Action*: Click `2. View Triage Board`.
+   - *Result*: The canvas updates to display the active Incident Triage Board listing anomalously high packets requiring review.
+3. **Step 3: Check Baselines**
+   - *Action*: Click `3. Check Baselines`.
+   - *Result*: The AI analyzes historical baseline traffic and appends a **Baseline Comparison Cards** widget to yesterday's logs to help the operator compare peak ingress metrics.
+4. **Step 4: Execute IP Isolation**
+   - *Action*: Click `4. Execute IP Isolation` (or click directly on the Attacker IP bubble on the topology map and select **Block Attacker IP**!).
+   - *Result*: The firewall blocks the source, the live traffic chart immediately drops to zero, and the workspace recomposes to a post-mitigation stable state.
+5. **Step 5: False Positive Check**
+   - *Action*: Click `5. False Positive Check`.
+   - *Result*: Emulates a scenario where the operator identifies the anomaly as an admin backup. The AI replans, replaces the containment tools, and mounts the **Kerberos Authentication Log Timeline** widget.
+6. **Step 6: Gen Incident Report**
+   - *Action*: Click `6. Gen Incident Report`.
+   - *Result*: The AI dynamically compiles all mitigation history, blocked IPs, and telemetry logs into an structured **Executive Incident Document** on the workspace.
+
+---
+
+## ⚡ Direct Node Interaction (Click-to-Block)
+Juries do not need to navigate separate containment menus to block threat IPs. In the **Threat Topology** panel:
+- **Click the red Attacker bubble** (`45.33.12.99`). 
+- A premium, context-aware menu appears offering a prominent **"Block Attacker IP"** action.
+- Clicking block instantly stops the telemetry simulator, drops the traffic lines on the chart, and changes the node's visual state to green/blocked (`🛡️`).
+- You can click it again to **"Unblock & Restore IP"** and watch traffic resume!
 
 ---
 
