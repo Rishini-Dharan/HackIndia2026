@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  # ─────────────────── Java Telemetry Ingestion ───────────────────
+  ingestion:
+    build:
+      context: ./telemetry-ingestion
+      dockerfile: Dockerfile
+    container_name: qgos-ingestion
+    restart: "no"
+    command: ["java", "TelemetryIngestion", "--simulate", "2000"]
+    networks:
+      - qguardian-net
+
+  # ─────────────────── FastAPI WebSocket Backend ──────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: qgos-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
+      - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1/chat/completions}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+    networks:
+      - qguardian-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ─────────────────── React Frontend ─────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: qgos-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - qguardian-net
+
+networks:
+  qguardian-net:
+    driver: bridge
