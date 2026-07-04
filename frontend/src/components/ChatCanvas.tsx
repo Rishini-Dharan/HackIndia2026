@@ -151,6 +151,7 @@ export default function ChatCanvas() {
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user'
+  const activeWorkspace = useWebSocketStore((s) => s.activeWorkspace)
 
   return (
     <div className="space-y-3">
@@ -168,8 +169,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         </div>
       </div>
 
-      {/* Render inline widgets attached to this message */}
-      {message.widgets && message.widgets.length > 0 && (
+      {/* Render inline widgets attached to this message (only if not in split workspace) */}
+      {!activeWorkspace && message.widgets && message.widgets.length > 0 && (
         <div className="space-y-3 pl-0">
           {message.widgets.map(widget => (
             <div key={widget.id} className="widget-enter">

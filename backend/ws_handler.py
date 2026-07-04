@@ -105,6 +105,20 @@ async def handle_ws_message(
                 metadata={"session_id": session_id, "ips": ips, "strategy": strategy}
             )
 
+            # Save the completed ransomware investigation profile to Qdrant vector store!
+            qdrant_memory.add_investigation(
+                case_id="INV-412",
+                status="neutralized",
+                evidence=[
+                    "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
+                    "Repeated connections from high-risk external subnet.",
+                    "Java high-speed packet ingestion classified: threat score = 0.985."
+                ],
+                hypothesis="Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
+                strategy=strategy,
+                notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}"
+            )
+
             # Simulate mitigation execution
             await manager.send_personal(websocket, {
                 "type": "chat",
@@ -113,14 +127,13 @@ async def handle_ws_message(
                     f"✅ **Mitigation Executed**\n\n"
                     f"**Strategy:** {strategy.upper()}\n"
                     f"**IPs Isolated:** {', '.join(ips)}\n"
-                    f"**Status:** All firewall rules applied successfully.\n"
-                    f"{'**Notes:** ' + notes if notes else ''}\n\n"
+                    f"**Status:** All firewall rules applied successfully.\n\n"
                     f"Traffic from these sources has been {'blocked' if strategy == 'block' else 'rate-limited' if strategy == 'rate-limit' else 'quarantined'}. "
-                    f"I've recorded this action in my vector memory."
+                    f"I have logged this containment status into Qdrant memory and marked case **INV-412** as neutralized."
                 ),
             })
 
-            # Send a widget update to reflect the mitigation
+            # Send a workspace unmount / update ruleset view
             await manager.send_personal(websocket, {
                 "type": "widget",
                 "action": "mount",
@@ -131,6 +144,24 @@ async def handle_ws_message(
                     "description": f"Monitoring traffic after isolating {len(ips)} IPs",
                     "mitigatedIps": ips,
                 },
+            })
+
+        elif action == "simulate_attack":
+            import anomaly_simulator
+            anomaly_simulator.set_attack_mode(True)
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": "⚡ **Attacker simulation pipeline initialized.** Ingestion logs starting to spike..."
+            })
+
+        elif action == "stop_simulation":
+            import anomaly_simulator
+            anomaly_simulator.set_attack_mode(False)
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": "🛡️ **Attacker simulation pipeline stopped.** Traffic metrics normalizing."
             })
 
         elif action == "incident_acknowledged":

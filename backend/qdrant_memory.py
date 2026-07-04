@@ -207,3 +207,25 @@ def clear_memories():
         print("[QDRANT] Collection reset successfully.")
     except Exception as e:
         print(f"[QDRANT] Error resetting collection: {e}")
+
+
+def add_investigation(case_id: str, status: str, evidence: list[str], hypothesis: str, strategy: str, notes: str) -> bool:
+    """Helper to store a structured investigation profile in vector memory."""
+    from datetime import datetime
+    fact_text = f"Investigation {case_id} is in status '{status}'. Hypothesis: {hypothesis}. Evidence: {', '.join(evidence)}. Chosen Strategy: {strategy}. Operator Notes: {notes}."
+    metadata = {
+        "case_id": case_id,
+        "status": status,
+        "evidence": evidence,
+        "hypothesis": hypothesis,
+        "strategy": strategy,
+        "notes": notes,
+        "timestamp": datetime.now().isoformat()
+    }
+    return add_memory(fact_text, category="investigations", metadata=metadata)
+
+
+def get_active_investigations() -> list[dict]:
+    """Retrieves list of active/saved investigations from Qdrant memory."""
+    return search_memory("active cases", limit=10, category="investigations")
+

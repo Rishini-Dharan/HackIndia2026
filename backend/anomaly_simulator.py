@@ -49,24 +49,127 @@ def _generate_telemetry_event() -> dict:
     }
 
 
+IS_ATTACK_ACTIVE = False
+PROACTIVE_TRIGGERED = False
+
+def set_attack_mode(active: bool):
+    global IS_ATTACK_ACTIVE, PROACTIVE_TRIGGERED
+    IS_ATTACK_ACTIVE = active
+    if not active:
+        PROACTIVE_TRIGGERED = False
+    print(f"[SIMULATOR] Attack mode updated: {active}")
+
+
 async def anomaly_simulator(manager):
     """
     Background task that pushes telemetry events to all connected
     WebSocket clients every 500ms.
     """
+    global PROACTIVE_TRIGGERED
     print("[SIMULATOR] Anomaly simulator started (500ms interval)")
 
     while True:
         try:
             if manager.active_connections:
-                # Generate 1-3 events per tick for visual density
-                events = [_generate_telemetry_event() for _ in range(random.randint(1, 3))]
-
-                for event in events:
+                if IS_ATTACK_ACTIVE:
+                    # ── Simulate Ransomware Attack Telemetry ──────────────────
+                    event = {
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "src_ip": "45.33.12.99",
+                        "dst_ip": "192.168.1.10",
+                        "protocol": "TCP",
+                        "port": 445,
+                        "bytes": random.randint(30000, 65535),
+                        "severity": "critical",
+                        "is_threat": True,
+                        "attack_type": "Ransomware",
+                        "score": 0.985,
+                    }
+                    
+                    # Broadcast telemetry
                     await manager.broadcast({
                         "type": "telemetry",
                         "data": event,
                     })
+
+                    # If this is the start of the attack, proactively mount workspace
+                    if not PROACTIVE_TRIGGERED:
+                        print("[SIMULATOR] Proactive threat detected! Mounting Investigation Workspace...")
+                        
+                        # Generate workspace mount message
+                        workspace_payload = {
+                            "type": "workspace_mount",
+                            "workspace": {
+                                "id": "INV-412",
+                                "title": "Ransomware Lateral Movement Case",
+                                "threatType": "Ransomware",
+                                "confidence": 98.0,
+                                "hypothesis": "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
+                                "evidence": [
+                                    "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
+                                    "Repeated connections from high-risk external subnet.",
+                                    "Java high-speed packet ingestion classified: threat score = 0.985."
+                                ],
+                                "layout": [
+                                    {
+                                        "component": "LiveTrafficChart",
+                                        "id": "traffic-ransomware",
+                                        "props": {
+                                            "title": "Active Traffic Spike (Port 445)",
+                                            "description": "Spike detected in Java ingestion packet logs"
+                                        }
+                                    },
+                                    {
+                                        "component": "ThreatTopology",
+                                        "id": "topology-ransomware",
+                                        "props": {
+                                            "title": "Ransomware Blast Radius",
+                                            "nodes": [
+                                                {"id": "45.33.12.99", "type": "attacker", "label": "45.33.12.99 (Attacker Node)", "severity": "critical"},
+                                                {"id": "192.168.1.10", "type": "victim", "label": "192.168.1.10 (Compromised Host)", "severity": "high"},
+                                                {"id": "192.168.1.1", "type": "clean", "label": "Gateway", "severity": "low"}
+                                            ],
+                                            "edges": [
+                                                {"source": "45.33.12.99", "target": "192.168.1.10", "attackType": "Ransomware", "bandwidth": 65535}
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "component": "MitigationAction",
+                                        "id": "mitigate-ransomware",
+                                        "props": {
+                                            "title": "Containment Controls",
+                                            "description": "Select isolation scope and execute block rules",
+                                            "threatIps": ["45.33.12.99"],
+                                            "attackType": "Ransomware",
+                                            "severity": "critical",
+                                            "blockDurationHours": 48,
+                                            "scope": "global"
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+
+                        # Broadcast proactive AI notification in chat
+                        await manager.broadcast({
+                            "type": "chat",
+                            "role": "agent",
+                            "content": "⚠️ **CRITICAL THREAT INTRUSION DETECTED**\n\nHigh-volume SMB anomalies detected. I have proactively instantiated investigation workspace **INV-412** and mounted the Threat Topology, Traffic Monitor, and Containment panels. Recommended action: Isolate host immediately.",
+                        })
+
+                        # Mount the workspace
+                        await manager.broadcast(workspace_payload)
+                        PROACTIVE_TRIGGERED = True
+
+                else:
+                    # ── Generate standard random packets ────────────────────────
+                    events = [_generate_telemetry_event() for _ in range(random.randint(1, 3))]
+                    for event in events:
+                        await manager.broadcast({
+                            "type": "telemetry",
+                            "data": event,
+                        })
 
             await asyncio.sleep(0.5)
 

@@ -39,6 +39,16 @@ export interface TelemetryEvent {
   score: number
 }
 
+export interface InvestigationWorkspace {
+  id: string
+  title: string
+  threatType: string
+  confidence: number
+  hypothesis: string
+  evidence: string[]
+  layout: WidgetDescriptor[]
+}
+
 interface WebSocketState {
   socket: WebSocket | null
   isConnected: boolean
@@ -46,6 +56,7 @@ interface WebSocketState {
   messages: ChatMessage[]
   mountedWidgets: WidgetDescriptor[]
   telemetryBuffer: TelemetryEvent[]
+  activeWorkspace: InvestigationWorkspace | null
   isTyping: boolean
 
   connect: (url?: string) => void
@@ -78,6 +89,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   messages: [],
   mountedWidgets: [],
   telemetryBuffer: [],
+  activeWorkspace: null,
   isTyping: false,
 
   connect: (url?: string) => {
@@ -139,6 +151,33 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
                 mountedWidgets: state.mountedWidgets.filter(w => w.id !== data.id),
               })
             }
+            break
+          }
+
+          case 'workspace_mount': {
+            const ws = data.workspace as InvestigationWorkspace
+            const widgets: WidgetDescriptor[] = (ws.layout || []).map((w: any) => ({
+              id: w.id || generateId(),
+              component: w.component,
+              props: w.props || {},
+              mountedAt: Date.now()
+            }))
+            
+            set({
+              activeWorkspace: {
+                ...ws,
+                layout: widgets
+              },
+              mountedWidgets: widgets
+            })
+            break
+          }
+
+          case 'workspace_unmount': {
+            set({
+              activeWorkspace: null,
+              mountedWidgets: []
+            })
             break
           }
 
@@ -226,7 +265,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [], mountedWidgets: [] })
+    set({ messages: [], mountedWidgets: [], activeWorkspace: null })
     const { socket } = get()
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({

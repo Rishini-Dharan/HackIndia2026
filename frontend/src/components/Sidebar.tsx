@@ -1,10 +1,6 @@
-/**
- * Q-Guardian OS — Sidebar Component
- * Brand, connection status, active widget count, and quick actions.
- */
-
+import { useState } from 'react'
 import { useWebSocketStore } from '../store/useWebSocketStore'
-import { Shield, Wifi, WifiOff, Activity, Trash2 } from 'lucide-react'
+import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert } from 'lucide-react'
 
 export default function Sidebar() {
   const isConnected = useWebSocketStore(s => s.isConnected)
@@ -12,10 +8,18 @@ export default function Sidebar() {
   const telemetryCount = useWebSocketStore(s => s.telemetryBuffer.length)
   const clearMessages = useWebSocketStore(s => s.clearMessages)
   const sendMessage = useWebSocketStore(s => s.sendMessage)
+  const sendAction = useWebSocketStore(s => s.sendAction)
+  const [isSimulating, setIsSimulating] = useState(false)
 
   const threatCount = useWebSocketStore(
     s => s.telemetryBuffer.filter(e => e.is_threat).length
   )
+
+  const toggleSimulation = () => {
+    const next = !isSimulating
+    setIsSimulating(next)
+    sendAction({ action: next ? 'simulate_attack' : 'stop_simulation' })
+  }
 
   return (
     <aside className="w-64 shrink-0 bg-abyss border-r border-border flex flex-col">
@@ -68,6 +72,24 @@ export default function Sidebar() {
               color="text-purple"
             />
           </div>
+        </div>
+
+        {/* Simulation Node */}
+        <div className="glass-card p-3 space-y-2">
+          <h3 className="text-[10px] uppercase tracking-widest text-text-dim font-semibold">
+            Simulation Control
+          </h3>
+          <button
+            onClick={toggleSimulation}
+            disabled={!isConnected}
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer border ${
+              isSimulating
+                ? 'bg-threat/20 border-threat/40 text-threat hover:bg-threat/30 animate-pulse'
+                : 'bg-cyan/10 border-cyan/20 text-cyan hover:bg-cyan/15 hover:border-cyan/35'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            {isSimulating ? '🛑 Stop Simulation' : '⚡ Simulate Attack'}
+          </button>
         </div>
       </div>
 

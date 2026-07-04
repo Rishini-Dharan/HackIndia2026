@@ -295,6 +295,86 @@ async def _mock_route(user_text: str) -> list[dict]:
             }
         ]
 
+    # ── Continue / Saved Cases (Stateful Case Resume) ────────────────
+    if any(kw in s for kw in ["continue", "saved cases", "case", "investigation"]):
+        import qdrant_memory
+        mems = qdrant_memory.get_active_investigations()
+        
+        # If we have a saved ransomware case in Qdrant, let's restore it
+        has_saved = len(mems) > 0
+        latest_case = mems[0] if has_saved else {}
+        case_id = latest_case.get("case_id", "INV-412")
+        status = latest_case.get("status", "Active")
+        hypothesis = latest_case.get("hypothesis", "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.")
+        evidence = latest_case.get("evidence", [
+            "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
+            "Java high-speed packet ingestion classified: threat score = 0.985."
+        ])
+        strategy = latest_case.get("strategy", "quarantine")
+        notes = latest_case.get("notes", "Host isolated by operator.")
+
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": f"🕵️ **Restoring Investigation Case {case_id} from Qdrant Memory**\n\n"
+                           f"• **Status:** {status.upper()}\n"
+                           f"• **Hypothesis:** {hypothesis}\n"
+                           f"• **Containment Strategy:** {strategy.upper()}\n"
+                           f"• **Operator Notes:** {notes}\n\n"
+                           f"Reassembling investigation workspace widgets...",
+            },
+            {
+                "type": "workspace_mount",
+                "workspace": {
+                    "id": case_id,
+                    "title": f"Investigation Case {case_id}",
+                    "threatType": "Ransomware",
+                    "confidence": 98.0,
+                    "hypothesis": hypothesis,
+                    "evidence": evidence,
+                    "layout": [
+                        {
+                            "component": "LiveTrafficChart",
+                            "id": "traffic-ransomware",
+                            "props": {
+                                "title": "SMB Traffic Spike (Restored)",
+                                "description": "Port 445 activity spike history"
+                            }
+                        },
+                        {
+                            "component": "ThreatTopology",
+                            "id": "topology-ransomware",
+                            "props": {
+                                "title": "Attack Blast Radius (Restored)",
+                                "nodes": [
+                                    {"id": "45.33.12.99", "type": "attacker", "label": "45.33.12.99 (Attacker Node)", "severity": "critical"},
+                                    {"id": "192.168.1.10", "type": "victim", "label": "192.168.1.10 (Compromised Host)", "severity": "high"},
+                                    {"id": "192.168.1.1", "type": "clean", "label": "Gateway", "severity": "low"}
+                                ],
+                                "edges": [
+                                    {"source": "45.33.12.99", "target": "192.168.1.10", "attackType": "Ransomware", "bandwidth": 65535}
+                                ]
+                            }
+                        },
+                        {
+                            "component": "MitigationAction",
+                            "id": "mitigate-ransomware",
+                            "props": {
+                                "title": "Containment Controls (Restored)",
+                                "description": "Select isolation scope and execute block rules",
+                                "threatIps": ["45.33.12.99"],
+                                "attackType": "Ransomware",
+                                "severity": "critical",
+                                "blockDurationHours": 48,
+                                "scope": "global"
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+
     # ── Mitigation / action intents ───────────────────────────────
     if any(kw in s for kw in ["mitigate", "block", "isolate", "quarantine", "action", "respond"]):
         return [
