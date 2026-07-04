@@ -114,6 +114,7 @@ async def handle_ws_message(
       - {"type": "chat", "content": "..."}        → LLM intent routing
       - {"type": "action", "payload": {...}}       → Mitigation actions
     """
+    global CURRENT_WORKSPACE
     msg_type = data.get("type", "")
 
     if msg_type == "chat":
@@ -340,6 +341,11 @@ async def handle_ws_message(
                 notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}"
             )
 
+            # ── Reactive: Block IPs in the simulator & stop attack mode ──
+            import anomaly_simulator
+            anomaly_simulator.block_ips(ips)
+            anomaly_simulator.set_attack_mode(False)
+
             # Simulate mitigation execution
             await manager.send_personal(websocket, {
                 "type": "chat",
@@ -350,21 +356,83 @@ async def handle_ws_message(
                     f"**IPs Isolated:** {', '.join(ips)}\n"
                     f"**Status:** All firewall rules applied successfully.\n\n"
                     f"Traffic from these sources has been {'blocked' if strategy == 'block' else 'rate-limited' if strategy == 'rate-limit' else 'quarantined'}. "
-                    f"I have logged this containment status into Qdrant memory and marked case **INV-412** as neutralized."
+                    f"I have logged this containment status into Qdrant memory and marked case **INV-412** as neutralized.\n\n"
+                    f"🔄 Recomposing workspace to post-mitigation monitoring view..."
                 ),
             })
 
-            # Send a workspace unmount / update ruleset view
-            await manager.send_personal(websocket, {
-                "type": "widget",
-                "action": "mount",
-                "component": "LiveTrafficChart",
-                "id": "post-mitigation-traffic",
-                "props": {
-                    "title": "Post-Mitigation Traffic",
-                    "description": f"Monitoring traffic after isolating {len(ips)} IPs",
-                    "mitigatedIps": ips,
-                },
+            # ── Broadcast mitigation_applied so frontend can flush threats ──
+            from datetime import datetime, timezone
+            await manager.broadcast({
+                "type": "mitigation_applied",
+                "blockedIps": ips,
+                "strategy": strategy,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+
+            # ── Proactive: Auto-recompose workspace post-mitigation ──────
+            CURRENT_WORKSPACE = {
+                "id": "INV-412",
+                "title": "Post-Mitigation Monitoring — INV-412",
+                "threatType": "Ransomware (Neutralized)",
+                "confidence": 0.0,
+                "hypothesis": "Threat neutralized. Blocked attacker IPs and transitioning to baseline monitoring.",
+                "evidence": [
+                    f"Mitigation strategy '{strategy}' applied to {len(ips)} IPs.",
+                    "Attack mode disabled — simulator producing clean traffic only.",
+                    "Firewall propagation delay: ~5 seconds for full dampening.",
+                ],
+                "layout": [
+                    {
+                        "component": "LiveTrafficChart",
+                        "id": "post-mitigation-traffic",
+                        "props": {
+                            "title": "Post-Mitigation Traffic Monitor",
+                            "description": "Real-time traffic returning to baseline — threats should drop to zero",
+                            "mitigatedIps": ips,
+                        }
+                    },
+                    {
+                        "component": "DynamicDashboard",
+                        "id": "blocked-threats-summary",
+                        "props": {
+                            "title": "Blocked Threats Summary",
+                            "description": "Mitigation action results for case INV-412",
+                            "layoutType": "cards",
+                            "data": [
+                                {"label": "Blocked IPs", "value": str(len(ips)), "trend": "stable"},
+                                {"label": "Strategy", "value": strategy.upper(), "trend": "normal"},
+                                {"label": "Status", "value": "Neutralized", "trend": "stable"},
+                                {"label": "Case ID", "value": "INV-412", "trend": "normal"},
+                            ]
+                        }
+                    },
+                    {
+                        "component": "ThreatTopology",
+                        "id": "topology-post-mitigation",
+                        "props": {
+                            "title": "Network Topology — Post-Mitigation",
+                            "nodes": [
+                                {"id": "45.33.12.99", "type": "attacker", "label": "45.33.12.99 (BLOCKED)", "severity": "low"},
+                                {"id": "192.168.1.10", "type": "clean", "label": "192.168.1.10 (Recovered)", "severity": "low"},
+                                {"id": "192.168.1.1", "type": "clean", "label": "Gateway", "severity": "low"}
+                            ],
+                            "edges": [
+                                {"source": "45.33.12.99", "target": "192.168.1.10", "attackType": "Blocked", "bandwidth": 0}
+                            ]
+                        }
+                    },
+                ]
+            }
+
+            await manager.broadcast({
+                "type": "workspace_mount",
+                "workspace": CURRENT_WORKSPACE
+            })
+
+            # ── Notify frontend to reset simulation button state ─────────
+            await manager.broadcast({
+                "type": "simulation_stopped",
             })
 
         elif action == "simulate_attack":
@@ -426,10 +494,17 @@ async def handle_ws_message(
         elif action == "clear_memory":
             print("[QDRANT] Clearing session vector database memory.")
             qdrant_memory.clear_memories()
+
+            # Reset simulator state for clean demos
+            import anomaly_simulator
+            anomaly_simulator.unblock_all()
+            anomaly_simulator.set_attack_mode(False)
+            reset_current_workspace()
+
             await manager.send_personal(websocket, {
                 "type": "chat",
                 "role": "agent",
-                "content": "🧹 Vector memory has been cleared and reset.",
+                "content": "🧹 Vector memory, blocklist, and workspace have been cleared and reset.",
             })
 
     else:

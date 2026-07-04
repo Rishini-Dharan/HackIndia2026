@@ -58,6 +58,8 @@ interface WebSocketState {
   telemetryBuffer: TelemetryEvent[]
   activeWorkspace: InvestigationWorkspace | null
   isTyping: boolean
+  blockedIps: Set<string>
+  isSimulating: boolean
 
   connect: (url?: string) => void
   disconnect: () => void
@@ -91,6 +93,8 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   telemetryBuffer: [],
   activeWorkspace: null,
   isTyping: false,
+  blockedIps: new Set<string>(),
+  isSimulating: false,
 
   connect: (url?: string) => {
     const wsUrl = url || DEFAULT_WS_URL
@@ -183,11 +187,37 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
 
           case 'telemetry': {
             const event = data.data as TelemetryEvent
+            // If this IP is blocked, skip threat events from it
+            if (event.is_threat && state.blockedIps.has(event.src_ip)) {
+              break
+            }
             const buf = [...state.telemetryBuffer, event]
             if (buf.length > MAX_TELEMETRY_BUFFER) {
               buf.splice(0, buf.length - MAX_TELEMETRY_BUFFER)
             }
             set({ telemetryBuffer: buf })
+            break
+          }
+
+          case 'mitigation_applied': {
+            const newBlocked = new Set(state.blockedIps)
+            const mitigatedIps: string[] = data.blockedIps || []
+            mitigatedIps.forEach((ip: string) => newBlocked.add(ip))
+
+            // Flush threat telemetry from blocked IPs so chart immediately reflects containment
+            const cleanedBuffer = state.telemetryBuffer.filter(
+              (evt: TelemetryEvent) => !(evt.is_threat && newBlocked.has(evt.src_ip))
+            )
+
+            set({
+              blockedIps: newBlocked,
+              telemetryBuffer: cleanedBuffer,
+            })
+            break
+          }
+
+          case 'simulation_stopped': {
+            set({ isSimulating: false })
             break
           }
         }
@@ -265,7 +295,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [], mountedWidgets: [], activeWorkspace: null })
+    set({ messages: [], mountedWidgets: [], activeWorkspace: null, blockedIps: new Set<string>(), isSimulating: false, telemetryBuffer: [] })
     const { socket } = get()
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({

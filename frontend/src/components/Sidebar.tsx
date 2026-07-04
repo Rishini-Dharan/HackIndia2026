@@ -1,6 +1,5 @@
-import { useState } from 'react'
 import { useWebSocketStore } from '../store/useWebSocketStore'
-import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert } from 'lucide-react'
+import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban } from 'lucide-react'
 
 export default function Sidebar() {
   const isConnected = useWebSocketStore(s => s.isConnected)
@@ -9,15 +8,17 @@ export default function Sidebar() {
   const clearMessages = useWebSocketStore(s => s.clearMessages)
   const sendMessage = useWebSocketStore(s => s.sendMessage)
   const sendAction = useWebSocketStore(s => s.sendAction)
-  const [isSimulating, setIsSimulating] = useState(false)
+  const isSimulating = useWebSocketStore(s => s.isSimulating)
 
   const threatCount = useWebSocketStore(
     s => s.telemetryBuffer.filter(e => e.is_threat).length
   )
 
+  const blockedCount = useWebSocketStore(s => s.blockedIps.size)
+
   const toggleSimulation = () => {
     const next = !isSimulating
-    setIsSimulating(next)
+    useWebSocketStore.setState({ isSimulating: next })
     sendAction({ action: next ? 'simulate_attack' : 'stop_simulation' })
   }
 
@@ -63,6 +64,7 @@ export default function Sidebar() {
             <MetricPill label="Widgets" value={widgetCount} color="text-cyan" />
             <MetricPill label="Threats" value={threatCount} color="text-threat" />
             <MetricPill label="Events" value={telemetryCount} color="text-amber" />
+            <MetricPill label="Blocked" value={blockedCount} color="text-green" />
             <MetricPill
               label="Score"
               value={telemetryCount > 0
