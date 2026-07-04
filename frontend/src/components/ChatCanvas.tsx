@@ -43,7 +43,7 @@ export default function ChatCanvas() {
       <header className="shrink-0 px-6 py-3 border-b border-border bg-abyss/80 backdrop-blur-sm flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Zap className="w-4 h-4 text-cyan" />
-          <h2 className="text-sm font-semibold text-text">Security Operations Console</h2>
+          <h2 className="text-sm font-semibold text-text">AI Investigation Operating System</h2>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-text-dim px-2 py-0.5 rounded bg-deep border border-border">
@@ -228,7 +228,7 @@ function EmptyState() {
       </div>
       <h3 className="text-base font-semibold text-text mb-2">Q-Guardian OS</h3>
       <p className="text-sm text-text-muted max-w-sm leading-relaxed">
-        Your AI Security Operations Center. Ask me to show live traffic, analyze threats, or mitigate attacks — I'll mount interactive widgets right here.
+        Your AI Investigation Operating System. Ask me to recover active threat cases, analyze logs, or orchestrate containment workspaces.
       </p>
       <div className="flex flex-wrap gap-2 mt-4 justify-center">
         {['Show live traffic', 'Analyze threats', 'Dashboard summary'].map(q => (

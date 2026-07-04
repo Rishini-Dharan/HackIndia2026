@@ -209,10 +209,27 @@ def clear_memories():
         print(f"[QDRANT] Error resetting collection: {e}")
 
 
-def add_investigation(case_id: str, status: str, evidence: list[str], hypothesis: str, strategy: str, notes: str) -> bool:
+def add_investigation(
+    case_id: str,
+    status: str,
+    evidence: list[str],
+    hypothesis: str,
+    strategy: str,
+    notes: str,
+    widgets_open: list[str] = None,
+    actions_taken: list[str] = None,
+    threat_confidence: float = 98.0,
+    next_suggested_action: str = "",
+    resolved: bool = False
+) -> bool:
     """Helper to store a structured investigation profile in vector memory."""
     from datetime import datetime
-    fact_text = f"Investigation {case_id} is in status '{status}'. Hypothesis: {hypothesis}. Evidence: {', '.join(evidence)}. Chosen Strategy: {strategy}. Operator Notes: {notes}."
+    fact_text = (
+        f"Investigation {case_id} [Resolved: {resolved}]. status '{status}'. Hypothesis: {hypothesis}. "
+        f"Evidence: {', '.join(evidence)}. Chosen Strategy: {strategy}. Operator Notes: {notes}. "
+        f"Widgets Active: {', '.join(widgets_open or [])}. Actions Taken: {', '.join(actions_taken or [])}. "
+        f"Confidence: {threat_confidence}%. Next step: {next_suggested_action}."
+    )
     metadata = {
         "case_id": case_id,
         "status": status,
@@ -220,6 +237,11 @@ def add_investigation(case_id: str, status: str, evidence: list[str], hypothesis
         "hypothesis": hypothesis,
         "strategy": strategy,
         "notes": notes,
+        "widgets_open": widgets_open or [],
+        "actions_taken": actions_taken or [],
+        "threat_confidence": threat_confidence,
+        "next_suggested_action": next_suggested_action,
+        "resolved": resolved,
         "timestamp": datetime.now().isoformat()
     }
     return add_memory(fact_text, category="investigations", metadata=metadata)
@@ -228,4 +250,5 @@ def add_investigation(case_id: str, status: str, evidence: list[str], hypothesis
 def get_active_investigations() -> list[dict]:
     """Retrieves list of active/saved investigations from Qdrant memory."""
     return search_memory("active cases", limit=10, category="investigations")
+
 

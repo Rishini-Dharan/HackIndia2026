@@ -95,61 +95,10 @@ async def anomaly_simulator(manager):
                     # If this is the start of the attack, proactively mount workspace
                     if not PROACTIVE_TRIGGERED:
                         print("[SIMULATOR] Proactive threat detected! Mounting Investigation Workspace...")
+                        import ws_handler
                         
-                        # Generate workspace mount message
-                        workspace_payload = {
-                            "type": "workspace_mount",
-                            "workspace": {
-                                "id": "INV-412",
-                                "title": "Ransomware Lateral Movement Case",
-                                "threatType": "Ransomware",
-                                "confidence": 98.0,
-                                "hypothesis": "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
-                                "evidence": [
-                                    "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
-                                    "Repeated connections from high-risk external subnet.",
-                                    "Java high-speed packet ingestion classified: threat score = 0.985."
-                                ],
-                                "layout": [
-                                    {
-                                        "component": "LiveTrafficChart",
-                                        "id": "traffic-ransomware",
-                                        "props": {
-                                            "title": "Active Traffic Spike (Port 445)",
-                                            "description": "Spike detected in Java ingestion packet logs"
-                                        }
-                                    },
-                                    {
-                                        "component": "ThreatTopology",
-                                        "id": "topology-ransomware",
-                                        "props": {
-                                            "title": "Ransomware Blast Radius",
-                                            "nodes": [
-                                                {"id": "45.33.12.99", "type": "attacker", "label": "45.33.12.99 (Attacker Node)", "severity": "critical"},
-                                                {"id": "192.168.1.10", "type": "victim", "label": "192.168.1.10 (Compromised Host)", "severity": "high"},
-                                                {"id": "192.168.1.1", "type": "clean", "label": "Gateway", "severity": "low"}
-                                            ],
-                                            "edges": [
-                                                {"source": "45.33.12.99", "target": "192.168.1.10", "attackType": "Ransomware", "bandwidth": 65535}
-                                            ]
-                                        }
-                                    },
-                                    {
-                                        "component": "MitigationAction",
-                                        "id": "mitigate-ransomware",
-                                        "props": {
-                                            "title": "Containment Controls",
-                                            "description": "Select isolation scope and execute block rules",
-                                            "threatIps": ["45.33.12.99"],
-                                            "attackType": "Ransomware",
-                                            "severity": "critical",
-                                            "blockDurationHours": 48,
-                                            "scope": "global"
-                                        }
-                                    }
-                                ]
-                            }
-                        }
+                        # Reset global active workspace to base layout
+                        ws_handler.reset_current_workspace()
 
                         # Broadcast proactive AI notification in chat
                         await manager.broadcast({
@@ -159,7 +108,10 @@ async def anomaly_simulator(manager):
                         })
 
                         # Mount the workspace
-                        await manager.broadcast(workspace_payload)
+                        await manager.broadcast({
+                            "type": "workspace_mount",
+                            "workspace": ws_handler.CURRENT_WORKSPACE
+                        })
                         PROACTIVE_TRIGGERED = True
 
                 else:

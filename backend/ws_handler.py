@@ -8,6 +8,65 @@ from fastapi import WebSocket
 from llm_orchestrator import route_intent
 import qdrant_memory
 
+# Global Active Workspace state tracking for dynamic modifications
+CURRENT_WORKSPACE = {}
+
+def reset_current_workspace():
+    global CURRENT_WORKSPACE
+    CURRENT_WORKSPACE = {
+        "id": "INV-412",
+        "title": "Ransomware Lateral Movement Case",
+        "threatType": "Ransomware",
+        "confidence": 98.0,
+        "hypothesis": "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
+        "evidence": [
+            "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
+            "Repeated connections from high-risk external subnet.",
+            "Java high-speed packet ingestion classified: threat score = 0.985."
+        ],
+        "layout": [
+            {
+                "component": "LiveTrafficChart",
+                "id": "traffic-ransomware",
+                "props": {
+                    "title": "Active Traffic Spike (Port 445)",
+                    "description": "Spike detected in Java ingestion packet logs"
+                }
+            },
+            {
+                "component": "ThreatTopology",
+                "id": "topology-ransomware",
+                "props": {
+                    "title": "Ransomware Blast Radius",
+                    "nodes": [
+                        {"id": "45.33.12.99", "type": "attacker", "label": "45.33.12.99 (Attacker Node)", "severity": "critical"},
+                        {"id": "192.168.1.10", "type": "victim", "label": "192.168.1.10 (Compromised Host)", "severity": "high"},
+                        {"id": "192.168.1.1", "type": "clean", "label": "Gateway", "severity": "low"}
+                    ],
+                    "edges": [
+                        {"source": "45.33.12.99", "target": "192.168.1.10", "attackType": "Ransomware", "bandwidth": 65535}
+                    ]
+                }
+            },
+            {
+                "component": "MitigationAction",
+                "id": "mitigate-ransomware",
+                "props": {
+                    "title": "Containment Controls",
+                    "description": "Select isolation scope and execute block rules",
+                    "threatIps": ["45.33.12.99"],
+                    "attackType": "Ransomware",
+                    "severity": "critical",
+                    "blockDurationHours": 48,
+                    "scope": "global"
+                }
+            }
+        ]
+    }
+
+reset_current_workspace()
+
+
 
 class ConnectionManager:
     """Manages active WebSocket connections and broadcasts."""
@@ -60,6 +119,81 @@ async def handle_ws_message(
     if msg_type == "chat":
         user_text = data.get("content", "").strip()
         if not user_text:
+            return
+
+        # ── WOW Moment: Dynamic Workspace Morphing / Evolving ─────────
+        user_lower = user_text.lower()
+        if any(kw in user_lower for kw in ["compare", "comparison"]):
+            # Add comparison panel to CURRENT_WORKSPACE layout
+            has_comparison = any(w["id"] == "comparison-widget" for w in CURRENT_WORKSPACE.get("layout", []))
+            if not has_comparison:
+                CURRENT_WORKSPACE["layout"].append({
+                    "component": "DynamicDashboard",
+                    "id": "comparison-widget",
+                    "props": {
+                        "title": "Historical Baseline Comparison",
+                        "description": "Port 445 SMB comparison against yesterday's normal metrics",
+                        "layoutType": "cards",
+                        "data": [
+                            {"label": "Baseline Traffic", "value": "12.4 KB/s", "trend": "stable"},
+                            {"label": "Peak Ingress", "value": "98.2 MB/s", "trend": "critical"}
+                        ]
+                    }
+                })
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": "📊 **Analyzing historical baselines...** I have appended the **Historical Comparison** panel to your active workspace layout."
+            })
+            await manager.send_personal(websocket, {
+                "type": "workspace_mount",
+                "workspace": CURRENT_WORKSPACE
+            })
+            return
+
+        elif any(kw in user_lower for kw in ["hide graph", "hide topology", "hide network"]):
+            # Filter ThreatTopology from CURRENT_WORKSPACE layout
+            CURRENT_WORKSPACE["layout"] = [w for w in CURRENT_WORKSPACE.get("layout", []) if w["component"] != "ThreatTopology"]
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": "👁️ **Workspace layout modified.** Hiding the network topology graph from active canvas."
+            })
+            await manager.send_personal(websocket, {
+                "type": "workspace_mount",
+                "workspace": CURRENT_WORKSPACE
+            })
+            return
+
+        elif any(kw in user_lower for kw in ["generate report", "executive report", "report"]):
+            # Add executive document to CURRENT_WORKSPACE layout
+            has_report = any(w["id"] == "report-widget" for w in CURRENT_WORKSPACE.get("layout", []))
+            if not has_report:
+                CURRENT_WORKSPACE["layout"].append({
+                    "component": "DynamicDashboard",
+                    "id": "report-widget",
+                    "props": {
+                        "title": "Executive Incident Report",
+                        "description": "Auto-generated analysis for incident INV-412",
+                        "layoutType": "document",
+                        "blocks": [
+                            {"type": "title", "content": "INCIDENT SUMMARY REPORT: INV-412"},
+                            {"type": "section", "content": "1. Incident Overview"},
+                            {"type": "paragraph", "content": "At 15:39 UTC, high-speed Java parsing logs flagged anomalous lateral movement traffic originating from high-risk external node 45.33.12.99. Target destination: Internal Server 192.168.1.10."},
+                            {"type": "section", "content": "2. Mitigation & Remediation Actions"},
+                            {"type": "paragraph", "content": "Operator executed immediate global isolation on the source endpoint. Outbound connections blocked. Post-mitigation metrics verified normal network levels."}
+                        ]
+                    }
+                })
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": "📝 **Compiling data logs...** I have generated the **Executive Incident Report** document widget and aligned it to your workspace grid."
+            })
+            await manager.send_personal(websocket, {
+                "type": "workspace_mount",
+                "workspace": CURRENT_WORKSPACE
+            })
             return
 
         # Add user's chat message to memory
