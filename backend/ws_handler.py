@@ -5,7 +5,7 @@ Q-Guardian OS — WebSocket Connection Manager & Message Handler
 import uuid
 import json
 from fastapi import WebSocket
-from llm_orchestrator import route_intent
+from llm_orchestrator import plan_investigation
 import qdrant_memory
 
 # Global Active Workspace state tracking for dynamic modifications
@@ -151,6 +151,93 @@ async def handle_ws_message(
             })
             return
 
+        elif any(kw in user_lower for kw in ["false positive", "legitimate", "admin"]):
+            # Operator claims false positive/authorized activity -> revise hypothesis and morph workspace!
+            CURRENT_WORKSPACE["title"] = "Investigation Closed: Legitimate Admin Session (False Positive)"
+            CURRENT_WORKSPACE["threatType"] = "False Positive"
+            CURRENT_WORKSPACE["confidence"] = 0.0
+            CURRENT_WORKSPACE["hypothesis"] = "Initial SMB lateral movement alert was triggered by authorized admin task running backups."
+            CURRENT_WORKSPACE["evidence"] = [
+                "Authorized administrative credentials (domain_admin_alex) used.",
+                "Process parent hash verified against deployment baseline.",
+                "Threat neutralized: classified as Legitimate Activity."
+            ]
+            
+            # Clean layout completely and mount validation dashboards instead of mitigation tools!
+            CURRENT_WORKSPACE["layout"] = [
+                {
+                    "component": "LiveTrafficChart",
+                    "id": "traffic-ransomware",
+                    "props": {
+                        "title": "Post-Mitigation Stable Traffic",
+                        "description": "Port 445 SMB bandwidth check",
+                        "mitigatedIps": ["45.33.12.99"]
+                    }
+                },
+                {
+                    "component": "DynamicDashboard",
+                    "id": "auth-timeline",
+                    "props": {
+                        "title": "Active Authentication Logs",
+                        "description": "Verification history of domain_admin_alex credentials",
+                        "layoutType": "table",
+                        "columns": [
+                            {"key": "timestamp", "label": "Timestamp"},
+                            {"key": "user", "label": "User Principle"},
+                            {"key": "action", "label": "Action Executed"},
+                            {"key": "status", "label": "Auth Status"}
+                        ],
+                        "rows": [
+                            {"timestamp": "15:38:12", "user": "domain_admin_alex", "action": "Kerberos Ticket Grant", "status": "Granted"},
+                            {"timestamp": "15:39:05", "user": "domain_admin_alex", "action": "Remote Directory Sync", "status": "Authorized"}
+                        ]
+                    }
+                },
+                {
+                    "component": "DynamicDashboard",
+                    "id": "security-baselines",
+                    "props": {
+                        "title": "Security Integrity Verification",
+                        "description": "Host host configuration baselines",
+                        "layoutType": "cards",
+                        "data": [
+                            {"label": "Host Integrity", "value": "100%", "trend": "stable"},
+                            {"label": "Credential Status", "value": "Valid Token", "trend": "normal"}
+                        ]
+                    }
+                }
+            ]
+
+            # Save the resolved False Positive investigation state to Qdrant memory!
+            qdrant_memory.add_investigation(
+                case_id="INV-412",
+                status="resolved_false_positive",
+                evidence=CURRENT_WORKSPACE["evidence"],
+                hypothesis=CURRENT_WORKSPACE["hypothesis"],
+                strategy="none",
+                notes="Analyst verified credentials; backup activity authorized. Case resolved as False Positive.",
+                widgets_open=["LiveTrafficChart", "auth-timeline", "security-baselines"],
+                actions_taken=["credentials_check"],
+                threat_confidence=0.0,
+                next_suggested_action="Close investigation ticket",
+                resolved=True
+            )
+
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": (
+                    "🕵️ **Hypothesis Revised & Resolved**\n\n"
+                    "Upon reviewing credential authorization hashes, I have verified that the SMB packets originated from `domain_admin_alex` during a scheduled backup synchronization.\n\n"
+                    "I have marked Case **INV-412** as a **False Positive (Legitimate Activity)** in Qdrant memory. I've re-composed the active workspace layout to replace security topology containment tools with the Authentication Verification timeline and Host Integrity panels."
+                )
+            })
+            await manager.send_personal(websocket, {
+                "type": "workspace_mount",
+                "workspace": CURRENT_WORKSPACE
+            })
+            return
+
         elif any(kw in user_lower for kw in ["hide graph", "hide topology", "hide network"]):
             # Filter ThreatTopology from CURRENT_WORKSPACE layout
             CURRENT_WORKSPACE["layout"] = [w for w in CURRENT_WORKSPACE.get("layout", []) if w["component"] != "ThreatTopology"]
@@ -204,7 +291,7 @@ async def handle_ws_message(
         )
 
         # Route through LLM orchestrator
-        responses = await route_intent(user_text)
+        responses = await plan_investigation(user_text)
 
         for response in responses:
             if response["type"] == "chat":

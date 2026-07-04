@@ -1,6 +1,6 @@
-# 🛡️ Q-Guardian OS — Stateful AI Security Operations Center
+# 🛡️ Q-Guardian OS — An Adaptive Investigation Operating System
 
-> A bidirectional WebSocket canvas where an AI agent dynamically mounts interactive React security widgets mid-conversation using structured LLM tool calling.
+> Q-Guardian does not generate dashboards—it generates adaptive investigation workspaces. Every workspace is composed in real time from live telemetry, investigation memory, and analyst intent. As the investigation evolves, the workspace mirrors the AI's reasoning state, ensuring analysts always see the right tools, evidence, and actions at the right moment.
 
 ---
 

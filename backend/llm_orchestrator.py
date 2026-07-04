@@ -1,12 +1,12 @@
 """
-Q-Guardian OS — LLM Orchestrator (Intent Router)
+Q-Guardian OS — LLM Orchestrator (Investigation Planner)
 
-Routes user chat messages to either:
-  1. A structured tool-call that emits widget mount/unmount JSON, or
+Plans security workflows and routes user chat messages to either:
+  1. A structured tool-call that emits workspace layout adjustments, or
   2. A plain text agent response.
 
 Supports four modes:
-  - mock   (default) — keyword-based intent matching
+  - mock   (default) — keyword-based planning
   - groq             — Groq cloud API (OpenAI-compatible, fast inference)
   - openai           — OpenAI chat completions with function calling
   - ollama           — Local Ollama API
@@ -375,6 +375,77 @@ async def _mock_route(user_text: str) -> list[dict]:
             }
         ]
 
+    # ── Cloud IAM Privilege Escalation Case ──────────────────────────
+    if any(kw in s for kw in ["privilege escalation", "cloud iam", "iam anomaly", "cloud attack"]):
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": "🛡️ **IAM anomaly detected.** I have proactively composed workspace **INV-771** to investigate suspected privilege escalation attempts on production bucket permissions.",
+            },
+            {
+                "type": "workspace_mount",
+                "workspace": {
+                    "id": "INV-771",
+                    "title": "Cloud IAM Privilege Escalation Case",
+                    "threatType": "Privilege Escalation",
+                    "confidence": 92.0,
+                    "hypothesis": "External actor compromised dev-deployer credentials and is attempting privilege escalation via policy editing.",
+                    "evidence": [
+                        "API Call 'iam:CreatePolicyVersion' triggered from Tor Exit IP 185.220.101.4.",
+                        "ML Classification engine score = 0.92."
+                    ],
+                    "layout": [
+                        {
+                            "component": "DynamicDashboard",
+                            "id": "iam-audit-log",
+                            "props": {
+                                "title": "CloudTrail Audit Alert Logs",
+                                "description": "Suspicious IAM API activities from Tor network subnet",
+                                "layoutType": "table",
+                                "columns": [
+                                    {"key": "api", "label": "API Call"},
+                                    {"key": "user", "label": "IAM Identity"},
+                                    {"key": "ip", "label": "Source IP"},
+                                    {"key": "status", "label": "Status"}
+                                ],
+                                "rows": [
+                                    {"api": "CreatePolicyVersion", "user": "dev-deployer", "ip": "185.220.101.4", "status": "AccessDenied"}
+                                ]
+                            }
+                        },
+                        {
+                            "component": "ThreatTopology",
+                            "id": "topology-iam",
+                            "props": {
+                                "title": "IAM Privilege Blast Radius",
+                                "nodes": [
+                                    {"id": "dev-deployer", "type": "attacker", "label": "dev-deployer (Compromised IAM)", "severity": "high"},
+                                    {"id": "admin-role", "type": "victim", "label": "Admin Role Target", "severity": "critical"}
+                                ],
+                                "edges": [
+                                    {"source": "dev-deployer", "target": "admin-role", "attackType": "AssumeRole", "bandwidth": 1}
+                                ]
+                            }
+                        },
+                        {
+                            "component": "MitigationAction",
+                            "id": "mitigate-iam",
+                            "props": {
+                                "title": "Cloud Control Panel",
+                                "description": "Revoke active keys and sessions for dev-deployer",
+                                "threatIps": ["185.220.101.4"],
+                                "attackType": "Privilege Escalation",
+                                "severity": "high",
+                                "blockDurationHours": 24,
+                                "scope": "global"
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+
     # ── Mitigation / action intents ───────────────────────────────
     if any(kw in s for kw in ["mitigate", "block", "isolate", "quarantine", "action", "respond"]):
         return [
@@ -605,9 +676,9 @@ async def _ollama_route(user_text: str) -> list[dict]:
 
 # ── Public Router ────────────────────────────────────────────────
 
-async def route_intent(user_text: str) -> list[dict]:
+async def plan_investigation(user_text: str) -> list[dict]:
     """
-    Main entry point. Routes user text through the configured LLM provider.
+    Main entry point. Plans security workflows through the configured LLM provider.
     Returns a list of WebSocket messages to send back to the client.
     """
     provider = LLM_PROVIDER.lower()
