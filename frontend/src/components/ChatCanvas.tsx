@@ -104,9 +104,9 @@ export default function ChatCanvas() {
       {/* Input Bar */}
       <form
         onSubmit={handleSubmit}
-        className="shrink-0 px-6 py-4 border-t border-border bg-abyss/80 backdrop-blur-sm"
+        className="shrink-0 px-4 py-3 border-t border-border bg-abyss relative z-10"
       >
-        <div className="flex gap-3 items-center max-w-4xl mx-auto">
+        <div className="flex gap-3 items-center">
           <div className="flex-1 relative">
             <input
               ref={inputRef}

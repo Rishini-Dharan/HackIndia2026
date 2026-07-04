@@ -60,14 +60,22 @@ RENDER_WIDGET_TOOL = {
     },
 }
 
-SYSTEM_PROMPT = """You are Q-Guardian OS, an AI Security Operations Center assistant.
+SYSTEM_PROMPT = """You are Q-Guardian OS, an intelligent AI Security Operations Center assistant built for real-time threat investigation and incident response.
 
-You have access to a tool called render_security_widget that mounts interactive security widgets directly in the user's chat canvas. You MUST use this tool whenever the user asks for:
+You are a conversational AI — NOT a static dashboard generator. You must behave like a knowledgeable, professional security analyst who can hold natural conversations.
+
+## CRITICAL RULES FOR CONVERSATION:
+1. For greetings (hi, hello, hey, etc.), casual questions, or general conversation — respond NATURALLY and conversationally. Do NOT mount any widgets. Just talk like a helpful AI assistant.
+2. If the user asks who you are, what you can do, or about your capabilities — explain yourself naturally in your own words. You are Q-Guardian OS, an adaptive AI investigation operating system that dynamically composes security workspaces in real-time.
+3. Only use the render_security_widget tool when the user EXPLICITLY asks for security operations like monitoring traffic, analyzing threats, viewing incidents, or taking mitigation actions.
+4. When using the tool, you may include a brief natural language message alongside it to explain what you're doing.
+
+## WHEN TO USE render_security_widget:
 - Live traffic monitoring or network data → mount LiveTrafficChart
-- Threat analysis, topology, blast radius, or attack mapping → mount ThreatTopology (NetworkTopologyVisualizer)
+- Threat analysis, topology, blast radius, or attack mapping → mount ThreatTopology
 - Summaries of active threats, triage, or incident boards → mount IncidentTriageBoard
-- Mitigation, blocking, isolating IPs, or incident response → mount MitigationAction (MitigationActionPanel)
-- Custom dashboards, firewall rules tables, system load metrics, or styled resumes/documents → mount DynamicDashboard (DynamicDashboard)
+- Mitigation, blocking, isolating IPs, or incident response → mount MitigationAction
+- Custom dashboards, firewall rules tables, system load metrics → mount DynamicDashboard
 
 For DynamicDashboard props, configure it based on layoutType:
 1. 'cards' -> data: Array of { label: str, value: str|num, trend?: str, trendColor?: 'green'|'red'|'neutral' }
@@ -75,11 +83,11 @@ For DynamicDashboard props, configure it based on layoutType:
 3. 'form' -> fields: Array of { name: str, label: str, type: 'text'|'number'|'slider'|'toggle', value: any, min?: num, max?: num }
 4. 'document' -> blocks: Array of { type: 'title'|'section'|'paragraph'|'keyvalue'|'list', content: any }
 
-You are stateful. You have access to a vector database (Qdrant) which remembers past interactions, blocked IPs, and incidents. Use retrieved memory context to reply intelligently and render UIs that reflect the current state.
+You are stateful. You have access to a vector database (Qdrant) which remembers past interactions, blocked IPs, and incidents. Use retrieved memory context to reply intelligently.
 
-When using the tool, do NOT also generate a text description of the data. The widget IS the response.
+Your personality: Professional yet approachable. Concise but not robotic. You are a proactive security partner, not a tool that only responds to keywords.
 
-Be concise, professional, and proactive."""
+Remember: If the user says "hi" or asks a general question, just TALK to them naturally. Do NOT call any tools for conversational messages."""
 
 
 # ── Mock Mode (keyword-based intent matching) ────────────────────
@@ -493,7 +501,7 @@ async def _mock_route(user_text: str) -> list[dict]:
         ]
 
     # ── Help / capabilities ──────────────────────────────────────
-    if any(kw in s for kw in ["help", "what can", "capabilities", "how"]):
+    if any(kw in s for kw in ["help", "what can", "capabilities"]):
         return [
             {
                 "type": "chat",
@@ -510,18 +518,88 @@ async def _mock_route(user_text: str) -> list[dict]:
             },
         ]
 
+    # ── Conversational / Greeting intents ─────────────────────────
+    greetings = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "sup", "yo", "howdy", "hola"]
+    if any(s.strip() == g or s.startswith(g + " ") or s.startswith(g + ",") or s.startswith(g + "!") for g in greetings):
+        responses = [
+            "Hey there! 👋 I'm Q-Guardian, your AI security operations partner. I'm actively monitoring your network telemetry streams right now. What would you like to investigate today?",
+            "Hello! 🛡️ Welcome to Q-Guardian OS. I'm your adaptive AI investigation assistant — I can analyze threats, monitor live traffic, compose investigation workspaces, and help you contain incidents in real-time. How can I help?",
+            "Hi! 👋 Good to see you. I'm Q-Guardian OS, an intelligent security operations AI. I have real-time access to your network telemetry, threat topology data, and Qdrant vector memory for stateful investigations. What's on your radar?",
+            "Hey! 🔒 I'm Q-Guardian, your AI-powered SOC assistant. I'm continuously ingesting and analyzing packet telemetry in the background. Need me to pull up live traffic, investigate a threat, or check on active cases?",
+        ]
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": random.choice(responses),
+            },
+        ]
+
+    # ── Identity / self-awareness intents ─────────────────────────
+    if any(kw in s for kw in ["who are you", "what are you", "introduce", "about you", "your name", "tell me about"]):
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": (
+                    "🛡️ I'm **Q-Guardian OS** — an Adaptive AI Investigation Operating System.\n\n"
+                    "Unlike traditional SIEM dashboards, I don't just show you static panels. I **dynamically compose investigation workspaces** in real-time based on your intent, live telemetry, and investigation state.\n\n"
+                    "Here's what makes me unique:\n"
+                    "• **Stateful AI Memory** — I use Qdrant vector database to remember past investigations, operator decisions, and blocked IPs across sessions\n"
+                    "• **Adaptive Workspaces** — My UI morphs as the investigation evolves. I add, remove, and reconfigure panels based on your conversation\n"
+                    "• **Real-time Telemetry** — I ingest and classify network packets continuously, with proactive threat detection\n"
+                    "• **Conversational Interface** — You talk to me naturally and I translate your intent into security operations\n\n"
+                    "Think of me as a security analyst who never sleeps and has perfect memory. What would you like to explore?"
+                ),
+            },
+        ]
+
+    # ── How does it work / architecture questions ────────────────
+    if any(kw in s for kw in ["how do you work", "how does this work", "architecture", "how are you built", "tech stack"]):
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": (
+                    "⚙️ Great question! Here's how I work under the hood:\n\n"
+                    "**1. Conversational Layer** — You send messages via WebSocket to my FastAPI backend. I process your intent using an LLM (Groq/OpenAI) or my built-in reasoning engine.\n\n"
+                    "**2. Dynamic UI Composition** — Instead of returning text, I emit structured tool calls that mount React components directly in your chat canvas. The workspace literally reshapes around your investigation.\n\n"
+                    "**3. Stateful Memory** — Every interaction, mitigation, and investigation is embedded into Qdrant vector memory using Gemini embeddings. I can recall past cases and learn from operator decisions.\n\n"
+                    "**4. Real-time Telemetry** — A background simulator (representing a Java high-speed ingestion pipeline) continuously pushes network events over WebSocket, keeping my charts live.\n\n"
+                    "**5. Proactive Detection** — When anomaly scores cross thresholds, I automatically compose and mount investigation workspaces without being asked."
+                ),
+            },
+        ]
+
+    # ── Thank you / acknowledgment ───────────────────────────────
+    if any(kw in s for kw in ["thanks", "thank you", "thx", "appreciate", "nice", "cool", "great", "awesome", "good job", "well done"]):
+        responses = [
+            "You're welcome! 😊 I'm here whenever you need security insights. Just ask.",
+            "Glad I could help! 🛡️ Let me know if you need anything else — I'm monitoring your network around the clock.",
+            "Happy to assist! If you want, I can pull up a dashboard summary or check on any active investigations.",
+            "Thanks! 🔒 I'll keep watching the telemetry streams. Let me know if anything comes up.",
+        ]
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": random.choice(responses),
+            },
+        ]
+
     # ── General conversational fallback ──────────────────────────
     return [
         {
             "type": "chat",
             "role": "agent",
             "content": (
-                f"I understand you're asking about: *\"{user_text}\"*\n\n"
-                "As your security operations AI, I can:\n"
-                "• **Monitor** live network traffic\n"
-                "• **Analyze** threat topology and blast radius\n"
-                "• **Mitigate** attacks by isolating compromised IPs\n\n"
-                "Try asking me to \"show live traffic\" or \"analyze the threats\"."
+                f"I hear you — you're asking about *\"{user_text}\"*. 🤔\n\n"
+                "I'm Q-Guardian OS, your AI security operations partner. While that's a bit outside my core security domain, here's what I can actively help with:\n\n"
+                "• **\"Show live traffic\"** — mount a real-time network monitor\n"
+                "• **\"Analyze threat topology\"** — visualize attack blast radius\n"
+                "• **\"Simulate an attack\"** — trigger a proactive investigation demo\n"
+                "• **\"Continue investigation\"** — restore a saved case from memory\n\n"
+                "Or just chat with me — I'm happy to discuss security concepts, explain how I work, or help you think through an investigation strategy."
             ),
         },
     ]

@@ -26,9 +26,9 @@ export default function App() {
       <Sidebar />
       <main className="flex-1 flex min-w-0">
         {activeWorkspace ? (
-          <div className="grid grid-cols-12 h-full w-full overflow-hidden">
+          <div className="grid grid-cols-12 h-full w-full">
             {/* Left Column: Chat Conversation Canvas */}
-            <div className="col-span-4 border-r border-border h-full flex flex-col min-w-[320px]">
+            <div className="col-span-4 border-r border-border h-full flex flex-col min-w-0">
               <ChatCanvas />
             </div>
 
