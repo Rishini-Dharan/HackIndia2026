@@ -747,9 +747,17 @@ async def _ollama_route(user_text: str) -> list[dict]:
         if content:
             return [{"type": "chat", "role": "agent", "content": content}]
     except Exception as e:
-        print(f"[LLM] Ollama unavailable ({e}), falling back to mock mode")
-
-    return await _mock_route(user_text)
+        print(f"[LLM] Ollama unavailable ({e}). No mock fallback enabled.")
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": (
+                    "⚠️ Q-Guardian OS encountered an Ollama connection error. "
+                    "Please verify OLLAMA_BASE_URL and that Ollama is running."
+                ),
+            }
+        ]
 
 
 # ── Public Router ────────────────────────────────────────────────
@@ -761,22 +769,70 @@ async def plan_investigation(user_text: str) -> list[dict]:
     """
     provider = LLM_PROVIDER.lower()
 
-    if provider == "groq" and GROQ_API_KEY:
+    if provider == "groq":
+        if not GROQ_API_KEY:
+            return [
+                {
+                    "type": "chat",
+                    "role": "agent",
+                    "content": (
+                        "⚠️ LLM provider is set to Groq, but GROQ_API_KEY is not configured. "
+                        "Please set GROQ_API_KEY in your .env file."
+                    ),
+                }
+            ]
         try:
             return await _groq_route(user_text)
         except Exception as e:
-            print(f"[LLM] Groq error: {e}, falling back to mock")
-            return await _mock_route(user_text)
+            print(f"[LLM] Groq error: {e}. No mock fallback enabled.")
+            return [
+                {
+                    "type": "chat",
+                    "role": "agent",
+                    "content": (
+                        "⚠️ Q-Guardian OS could not reach Groq. "
+                        "Please check GROQ_BASE_URL, GROQ_API_KEY, and your network connectivity."
+                    ),
+                }
+            ]
 
-    if provider == "openai" and OPENAI_API_KEY:
+    if provider == "openai":
+        if not OPENAI_API_KEY:
+            return [
+                {
+                    "type": "chat",
+                    "role": "agent",
+                    "content": (
+                        "⚠️ LLM provider is set to OpenAI, but OPENAI_API_KEY is not configured. "
+                        "Please set OPENAI_API_KEY in your .env file."
+                    ),
+                }
+            ]
         try:
             return await _openai_route(user_text)
         except Exception as e:
-            print(f"[LLM] OpenAI error: {e}, falling back to mock")
-            return await _mock_route(user_text)
+            print(f"[LLM] OpenAI error: {e}. No mock fallback enabled.")
+            return [
+                {
+                    "type": "chat",
+                    "role": "agent",
+                    "content": (
+                        "⚠️ Q-Guardian OS could not reach OpenAI. "
+                        "Please check your API key and network connectivity."
+                    ),
+                }
+            ]
 
     if provider == "ollama":
         return await _ollama_route(user_text)
 
-    # Default: mock mode
-    return await _mock_route(user_text)
+    return [
+        {
+            "type": "chat",
+            "role": "agent",
+            "content": (
+                "⚠️ Invalid LLM_PROVIDER configured. "
+                "Set LLM_PROVIDER to one of: groq, openai, ollama, or mock."
+            ),
+        }
+    ]
