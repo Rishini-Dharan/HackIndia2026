@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useWebSocketStore } from '../store/useWebSocketStore'
-import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban } from 'lucide-react'
+import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban, Layers, Search, FileText } from 'lucide-react'
 
 export default function Sidebar() {
   const isConnected = useWebSocketStore(s => s.isConnected)
@@ -9,6 +10,8 @@ export default function Sidebar() {
   const sendMessage = useWebSocketStore(s => s.sendMessage)
   const sendAction = useWebSocketStore(s => s.sendAction)
   const isSimulating = useWebSocketStore(s => s.isSimulating)
+  const triggerDemoStage = useWebSocketStore(s => s.triggerDemoStage)
+  const [activeStep, setActiveStep] = useState<string | null>(null)
 
   const threatCount = useWebSocketStore(
     s => s.telemetryBuffer.filter(e => e.is_threat).length
@@ -39,8 +42,10 @@ export default function Sidebar() {
         </div>
       </div>
 
-      {/* Status */}
-      <div className="p-4 space-y-3">
+      {/* Scrollable Sidebar Content Area */}
+      <div className="flex-grow overflow-y-auto p-4 space-y-3.5 custom-scrollbar">
+        
+        {/* Status */}
         <div className="glass-card p-3">
           <div className="flex items-center gap-2 mb-2">
             <div className={`status-dot ${isMockMode ? 'connected' : isConnected ? 'connected' : 'disconnected'}`} />
@@ -97,6 +102,83 @@ export default function Sidebar() {
             {isSimulating ? '🛑 Stop Simulation' : '⚡ Simulate Attack'}
           </button>
         </div>
+
+        {/* Jury Walkthrough */}
+        <div className="glass-card p-3 border-purple/35 bg-purple/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[10px] uppercase tracking-widest text-purple font-bold">
+              Jury Walkthrough
+            </h3>
+            <span className="text-[9px] bg-purple/20 text-purple px-1.5 py-0.5 rounded font-semibold uppercase">
+              Demo Guide
+            </span>
+          </div>
+          <p className="text-[9px] text-text-dim leading-relaxed">
+            Morph the interface step-by-step to test the complete dynamic telemetry response.
+          </p>
+          <div className="space-y-1.5 pt-1">
+            <DemoStepBtn
+              num="1"
+              label="Trigger Attack"
+              icon={<ShieldAlert className="w-3.5 h-3.5 text-threat" />}
+              active={activeStep === 'attack'}
+              onClick={() => {
+                setActiveStep('attack')
+                triggerDemoStage('attack')
+              }}
+            />
+            <DemoStepBtn
+              num="2"
+              label="View Triage Board"
+              icon={<Layers className="w-3.5 h-3.5 text-amber" />}
+              active={activeStep === 'triage'}
+              onClick={() => {
+                setActiveStep('triage')
+                triggerDemoStage('triage')
+              }}
+            />
+            <DemoStepBtn
+              num="3"
+              label="Check Baselines"
+              icon={<Search className="w-3.5 h-3.5 text-cyan" />}
+              active={activeStep === 'comparison'}
+              onClick={() => {
+                setActiveStep('comparison')
+                triggerDemoStage('comparison')
+              }}
+            />
+            <DemoStepBtn
+              num="4"
+              label="Execute IP Isolation"
+              icon={<Ban className="w-3.5 h-3.5 text-threat" />}
+              active={activeStep === 'block'}
+              onClick={() => {
+                setActiveStep('block')
+                triggerDemoStage('block')
+              }}
+            />
+            <DemoStepBtn
+              num="5"
+              label="False Positive Check"
+              icon={<Shield className="w-3.5 h-3.5 text-green" />}
+              active={activeStep === 'false_positive'}
+              onClick={() => {
+                setActiveStep('false_positive')
+                triggerDemoStage('false_positive')
+              }}
+            />
+            <DemoStepBtn
+              num="6"
+              label="Gen Incident Report"
+              icon={<FileText className="w-3.5 h-3.5 text-purple" />}
+              active={activeStep === 'report'}
+              onClick={() => {
+                setActiveStep('report')
+                triggerDemoStage('report')
+              }}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Quick Actions */}
@@ -133,6 +215,40 @@ function MetricPill({ label, value, color }: { label: string; value: string | nu
       <div className={`text-sm font-bold font-mono ${color}`}>{value}</div>
       <div className="text-[9px] text-text-dim uppercase tracking-wider">{label}</div>
     </div>
+  )
+}
+
+function DemoStepBtn({
+  num,
+  label,
+  icon,
+  active,
+  onClick,
+}: {
+  num: string
+  label: string
+  icon: React.ReactNode
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold
+        transition-all duration-200 cursor-pointer border text-left
+        ${active
+          ? 'bg-purple/15 border-purple/40 text-purple shadow-sm shadow-purple/10'
+          : 'bg-deep/30 border-white/5 text-text-dim hover:border-purple/20 hover:text-text-muted hover:bg-white/2'
+        }
+      `}
+    >
+      <span className={`w-4 h-4 rounded-md flex items-center justify-center text-[9px] font-mono font-bold ${
+        active ? 'bg-purple text-void' : 'bg-white/5 text-text-dim'
+      }`}>{num}</span>
+      <span className="flex-1 truncate">{label}</span>
+      <span>{icon}</span>
+    </button>
   )
 }
 

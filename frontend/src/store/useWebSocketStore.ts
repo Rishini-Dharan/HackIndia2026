@@ -69,6 +69,7 @@ interface WebSocketState {
   sendAction: (payload: Record<string, unknown>) => void
   dismissWidget: (widgetId: string) => void
   clearMessages: () => void
+  triggerDemoStage: (stage: string) => void
 }
 
 // ── Constants ────────────────────────────────────────────────────
@@ -339,7 +340,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       id: generateId(),
       type: 'chat',
       role: 'agent',
-      content: "🤖 **Local Sandbox Activated**\n\nI couldn't establish a connection to the Q-Guardian FastAPI backend at `ws://localhost:8000` (this usually happens if the backend is not running or when hosted statically).\n\nNo worries! I've loaded a fully interactive **client-side simulator** in your browser. \n\nYou can click **'Simulate Attack'** in the sidebar, watch telemetry stream, interact with me in chat (try asking to *'show live traffic'*), and execute the **Mitigation containment** rules!",
+      content: "🤖 **Local Sandbox Activated**\n\nI couldn't establish a connection to the Q-Guardian FastAPI backend at `ws://localhost:8000` (this usually happens if the backend is not running or when hosted statically).\n\nNo worries! I've loaded a fully interactive **client-side simulator** in your browser. \n\nYou can click **'Simulate Attack'** in the sidebar, watch telemetry stream, interact with me in chat (try asking to *'show live traffic'*, *'open triage board'*, *'show firewall rules'*), and execute the **Mitigation containment** rules!",
       timestamp: Date.now()
     }
 
@@ -551,7 +552,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       // Emulate Chat response in local mock mode
       setTimeout(() => {
         const s = content.toLowerCase()
-        let reply = "Hello! I am Q-Guardian OS. I dynamically compile security dashboards. Try asking me to **'show live network traffic'** or **'analyze the threat topology'**."
+        let reply = "Hello! I am Q-Guardian OS. I dynamically compile security dashboards. Try asking me to **'show live network traffic'**, **'analyze the threat topology'**, **'open triage board'**, or **'show firewall rules'**."
         let widget: WidgetDescriptor | null = null
         let newWorkspaceLayout: WidgetDescriptor[] | null = null
 
@@ -623,7 +624,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
             mountedAt: Date.now()
           }
         }
-        else if (anyKeyword(s, ["compare", "comparison"])) {
+        else if (anyKeyword(s, ["compare", "comparison", "investigate", "historical"])) {
           // Morph current workspace if active
           const active = get().activeWorkspace
           if (active) {
@@ -818,6 +819,27 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       else if (action === 'stop_simulation') {
         set({ isSimulating: false })
       } 
+      else if (action === 'chat_command') {
+        get().sendMessage((payload.command as string) || '')
+      } 
+      else if (action === 'unblock_ip') {
+        const ips = (payload.ips as string[]) || []
+        const nextBlocked = new Set(get().blockedIps)
+        ips.forEach(ip => nextBlocked.delete(ip))
+        set({ blockedIps: nextBlocked })
+        
+        // Broadcast confirmation
+        setTimeout(() => {
+          const unblockMsg: ChatMessage = {
+            id: generateId(),
+            type: 'chat',
+            role: 'agent',
+            content: `🔓 **Firewall Rule Removed**\n\n**IPs Restored:** ${ips.join(', ')}\n**Status:** Firewall rule updated. Traffic from this source is no longer blocked. Network state returning to standard monitoring.`,
+            timestamp: Date.now()
+          }
+          set({ messages: [...get().messages, unblockMsg] })
+        }, 600)
+      }
       else if (action === 'isolate_ip') {
         const ips = (payload.ips as string[]) || []
         const strategy = (payload.strategy as string) || "block"
@@ -949,6 +971,286 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
           type: 'action',
           payload: { action: 'clear_memory' }
         }))
+      }
+    },
+
+    triggerDemoStage: (stage: string) => {
+      const state = get()
+      
+      // Auto-fallback and initialize simulator loop if not already running
+      if (!state.isMockMode) {
+        set({ isMockMode: true, isConnected: true })
+        startMockTelemetryLoop()
+      }
+
+      switch (stage) {
+        case 'attack': {
+          set({
+            isSimulating: true,
+            blockedIps: new Set(),
+            telemetryBuffer: []
+          })
+          proactiveTriggered = true
+          mitigationTime = null
+          
+          const currentWorkspace: InvestigationWorkspace = {
+            id: "INV-412",
+            title: "Ransomware Lateral Movement Case",
+            threatType: "Ransomware",
+            confidence: 98.0,
+            hypothesis: "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
+            evidence: [
+              "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
+              "Repeated connections from high-risk external subnet.",
+              "Java high-speed packet ingestion classified: threat score = 0.985."
+            ],
+            layout: [
+              {
+                id: "traffic-ransomware",
+                component: "LiveTrafficChart",
+                props: {
+                  title: "Active Traffic Spike (Port 445)",
+                  description: "Spike detected in Java ingestion packet logs"
+                },
+                mountedAt: Date.now()
+              },
+              {
+                id: "topology-ransomware",
+                component: "ThreatTopology",
+                props: {
+                  title: "Ransomware Blast Radius",
+                  nodes: [
+                    { id: "45.33.12.99", type: "attacker", label: "45.33.12.99 (Attacker)", severity: "critical" },
+                    { id: "192.168.1.10", type: "victim", label: "192.168.1.10 (Compromised)", severity: "high" },
+                    { id: "192.168.1.1", type: "clean", label: "Gateway", severity: "low" }
+                  ],
+                  edges: [
+                    { source: "45.33.12.99", target: "192.168.1.10", attackType: "Ransomware", bandwidth: 65535 }
+                  ]
+                },
+                mountedAt: Date.now()
+              },
+              {
+                id: "mitigate-ransomware",
+                component: "MitigationAction",
+                props: {
+                  title: "Containment Controls",
+                  description: "Select isolation scope and execute block rules",
+                  threatIps: ["45.33.12.99"],
+                  attackType: "Ransomware",
+                  severity: "critical",
+                  blockDurationHours: 48,
+                  scope: "global"
+                },
+                mountedAt: Date.now()
+              }
+            ]
+          }
+
+          const alertMsg: ChatMessage = {
+            id: generateId(),
+            type: 'chat',
+            role: 'agent',
+            content: "⚠️ **CRITICAL THREAT INTRUSION DETECTED**\n\nHigh-volume SMB anomalies detected. I have proactively instantiated investigation workspace **INV-412** and mounted the Threat Topology, Traffic Monitor, and Containment panels. Recommended action: Isolate host immediately.",
+            timestamp: Date.now(),
+            widgets: currentWorkspace.layout
+          }
+
+          set({
+            activeWorkspace: currentWorkspace,
+            mountedWidgets: currentWorkspace.layout,
+            messages: [
+              ...state.messages, 
+              { id: generateId(), type: 'chat', role: 'user', content: 'Simulate threat intrusion', timestamp: Date.now() }, 
+              alertMsg
+            ]
+          })
+          break
+        }
+        case 'triage': {
+          const triageWidget = {
+            id: `triage-${Math.floor(Math.random() * 9000) + 1000}`,
+            component: "IncidentTriageBoard",
+            props: {
+              title: "Incident Triage Board",
+              description: "Active anomalies requiring operator attention"
+            },
+            mountedAt: Date.now()
+          }
+
+          set({
+            activeWorkspace: null,
+            mountedWidgets: [triageWidget],
+            messages: [
+              ...state.messages,
+              { id: generateId(), type: 'chat', role: 'user', content: 'Open incident triage board', timestamp: Date.now() },
+              { id: generateId(), type: 'chat', role: 'agent', content: '📋 Fetching the current incident triage board.', timestamp: Date.now(), widgets: [triageWidget] }
+            ]
+          })
+          break
+        }
+        case 'comparison': {
+          const active = state.activeWorkspace || {
+            id: "INV-412",
+            title: "Ransomware Lateral Movement Case",
+            threatType: "Ransomware",
+            confidence: 98.0,
+            hypothesis: "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies.",
+            evidence: ["Unusually high bytes transfer (65,535 bytes) on SMB port 445."],
+            layout: []
+          }
+
+          const compWidget = {
+            id: "comparison-widget",
+            component: "DynamicDashboard",
+            props: {
+              title: "Historical Baseline Comparison",
+              description: "Port 445 SMB comparison against yesterday's normal metrics",
+              layoutType: "cards",
+              data: [
+                { label: "Baseline Traffic", value: "12.4 KB/s", trend: "stable" },
+                { label: "Peak Ingress", value: "98.2 MB/s", trend: "critical" }
+              ]
+            },
+            mountedAt: Date.now()
+          }
+
+          const baseWidgets = active.layout.filter(w => w.id !== 'comparison-widget')
+          const newLayout = [...baseWidgets, compWidget]
+
+          set({
+            activeWorkspace: { ...active, layout: newLayout },
+            mountedWidgets: newLayout,
+            messages: [
+              ...state.messages,
+              { id: generateId(), type: 'chat', role: 'user', content: 'Compare baseline metrics', timestamp: Date.now() },
+              { id: generateId(), type: 'chat', role: 'agent', content: "📊 **Analyzing historical baselines...** I have appended the **Historical Comparison** panel to your active workspace layout.", timestamp: Date.now() }
+            ]
+          })
+          break
+        }
+        case 'block': {
+          // Trigger block action directly
+          state.sendAction({
+            action: 'isolate_ip',
+            ips: ['45.33.12.99'],
+            strategy: 'block'
+          })
+          break
+        }
+        case 'false_positive': {
+          const revisedWorkspace: InvestigationWorkspace = {
+            id: "INV-412",
+            title: "Investigation Closed: Legitimate Admin Session (False Positive)",
+            threatType: "False Positive",
+            confidence: 0.0,
+            hypothesis: "Initial SMB lateral movement alert was triggered by authorized admin task running backups.",
+            evidence: [
+              "Authorized administrative credentials (domain_admin_alex) used.",
+              "Process parent hash verified against deployment baseline.",
+              "Threat neutralized: classified as Legitimate Activity."
+            ],
+            layout: [
+              {
+                id: "traffic-ransomware",
+                component: "LiveTrafficChart",
+                props: {
+                  title: "Post-Mitigation Stable Traffic",
+                  description: "Port 445 SMB bandwidth check",
+                  mitigatedIps: Array.from(state.blockedIps)
+                },
+                mountedAt: Date.now()
+              },
+              {
+                id: "auth-timeline",
+                component: "DynamicDashboard",
+                props: {
+                  title: "Active Authentication Logs",
+                  description: "Verification history of domain_admin_alex credentials",
+                  layoutType: "table",
+                  columns: [
+                    { key: "timestamp", label: "Timestamp" },
+                    { key: "user", label: "User Principle" },
+                    { key: "action", label: "Action Executed" },
+                    { key: "status", label: "Auth Status" }
+                  ],
+                  rows: [
+                    { timestamp: "15:38:12", user: "domain_admin_alex", action: "Kerberos Ticket Grant", status: "Granted" },
+                    { timestamp: "15:39:05", user: "domain_admin_alex", action: "Remote Directory Sync", status: "Authorized" }
+                  ]
+                },
+                mountedAt: Date.now()
+              },
+              {
+                id: "security-baselines",
+                component: "DynamicDashboard",
+                props: {
+                  title: "Security Integrity Verification",
+                  description: "Host configuration baselines",
+                  layoutType: "cards",
+                  data: [
+                    { label: "Host Integrity", value: "100%", trend: "stable" },
+                    { label: "Credential Status", value: "Valid Token", trend: "normal" }
+                  ]
+                },
+                mountedAt: Date.now()
+              }
+            ]
+          }
+          set({
+            activeWorkspace: revisedWorkspace,
+            mountedWidgets: revisedWorkspace.layout,
+            messages: [
+              ...state.messages,
+              { id: generateId(), type: 'chat', role: 'user', content: 'Is this a false positive?', timestamp: Date.now() },
+              { id: generateId(), type: 'chat', role: 'agent', content: "🕵️ **Hypothesis Revised & Resolved**\n\nUpon reviewing credential authorization hashes, I have verified that the SMB packets originated from `domain_admin_alex` during a scheduled backup synchronization.\n\nI have marked Case **INV-412** as a **False Positive (Legitimate Activity)** in local memory. I've re-composed the active workspace layout to replace security topology containment tools with the Authentication Verification timeline and Host Integrity panels.", timestamp: Date.now() }
+            ]
+          })
+          break
+        }
+        case 'report': {
+          const active = state.activeWorkspace || {
+            id: "INV-412",
+            title: "Ransomware Lateral Movement Case",
+            threatType: "Ransomware",
+            confidence: 98.0,
+            hypothesis: "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies.",
+            evidence: ["Unusually high bytes transfer (65,535 bytes) on SMB port 445."],
+            layout: []
+          }
+
+          const repWidget = {
+            id: "report-widget",
+            component: "DynamicDashboard",
+            props: {
+              title: "Executive Incident Report",
+              description: "Auto-generated analysis for incident INV-412",
+              layoutType: "document",
+              blocks: [
+                { type: "title", content: "INCIDENT SUMMARY REPORT: INV-412" },
+                { type: "section", content: "1. Incident Overview" },
+                { type: "paragraph", content: "At 15:39 UTC, high-speed Java parsing logs flagged anomalous lateral movement traffic originating from high-risk external node 45.33.12.99. Target destination: Internal Server 192.168.1.10." },
+                { type: "section", content: "2. Mitigation & Remediation Actions" },
+                { type: "paragraph", content: "Operator executed immediate global isolation on the source endpoint. Outbound connections blocked. Post-mitigation metrics verified normal network levels." }
+              ]
+            },
+            mountedAt: Date.now()
+          }
+
+          const baseWidgets = active.layout.filter(w => w.id !== 'report-widget')
+          const newLayout = [...baseWidgets, repWidget]
+
+          set({
+            activeWorkspace: { ...active, layout: newLayout },
+            mountedWidgets: newLayout,
+            messages: [
+              ...state.messages,
+              { id: generateId(), type: 'chat', role: 'user', content: 'Generate report for INV-412', timestamp: Date.now() },
+              { id: generateId(), type: 'chat', role: 'agent', content: "📝 **Compiling data logs...** I have generated the **Executive Incident Report** document widget and aligned it to your workspace grid.", timestamp: Date.now() }
+            ]
+          })
+          break
+        }
       }
     },
   }

@@ -7,7 +7,8 @@
  */
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, Server, Shield } from 'lucide-react'
+import { AlertTriangle, Server, Shield, ShieldAlert, Search, X, Layers } from 'lucide-react'
+import { useWebSocketStore } from '../../store/useWebSocketStore'
 
 interface TopoNode {
   id: string
@@ -45,6 +46,37 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
   const nodes = (props.nodes as TopoNode[]) || []
   const edges = (props.edges as TopoEdge[]) || []
   const [tooltip, setTooltip] = useState<TooltipState>({ x: 0, y: 0, node: null })
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: TopoNode & { isBlocked?: boolean } } | null>(null)
+  const sendAction = useWebSocketStore(s => s.sendAction)
+  const blockedIps = useWebSocketStore(s => s.blockedIps)
+
+  const dynamicNodes = useMemo(() => {
+    return nodes.map(n => {
+      if (blockedIps.has(n.id)) {
+        return {
+          ...n,
+          type: 'clean' as const,
+          label: `${n.id} (Blocked)`,
+          severity: 'low',
+          isBlocked: true
+        }
+      }
+      return { ...n, isBlocked: false }
+    })
+  }, [nodes, blockedIps])
+
+  const dynamicEdges = useMemo(() => {
+    return edges.map(e => {
+      if (blockedIps.has(e.source) || blockedIps.has(e.target)) {
+        return {
+          ...e,
+          bandwidth: 0,
+          attackType: 'Blocked'
+        }
+      }
+      return e
+    })
+  }, [edges, blockedIps])
 
   // Layout: position nodes in a force-like radial arrangement
   const positions = useMemo(() => {
@@ -102,17 +134,17 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4 text-[10px] text-text-muted">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-threat" /> Attacker ({nodes.filter(n => n.type === 'attacker').length})
+            <span className="w-2.5 h-2.5 rounded-full bg-threat" /> Attacker ({dynamicNodes.filter(n => n.type === 'attacker').length})
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber" /> Victim ({nodes.filter(n => n.type === 'victim').length})
+            <span className="w-2.5 h-2.5 rounded-full bg-amber" /> Victim ({dynamicNodes.filter(n => n.type === 'victim').length})
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-green" /> Clean ({nodes.filter(n => n.type === 'clean').length})
+            <span className="w-2.5 h-2.5 rounded-full bg-green" /> Clean/Blocked ({dynamicNodes.filter(n => n.type === 'clean').length})
           </span>
         </div>
         <span className="text-[10px] text-text-dim font-mono">
-          {edges.length} attack vector{edges.length !== 1 ? 's' : ''}
+          {dynamicEdges.length} vector{dynamicEdges.length !== 1 ? 's' : ''}
         </span>
       </div>
 
@@ -142,11 +174,12 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
           </defs>
 
           {/* Edges */}
-          {edges.map((edge, i) => {
+          {dynamicEdges.map((edge, i) => {
             const from = positions[edge.source]
             const to = positions[edge.target]
             if (!from || !to) return null
 
+            const isBlocked = edge.bandwidth === 0
             return (
               <g key={`edge-${i}`}>
                 <line
@@ -154,17 +187,18 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
                   y1={from.y}
                   x2={to.x}
                   y2={to.y}
-                  stroke="#ff3e3e"
-                  strokeWidth={Math.max(1, Math.min(3, edge.bandwidth / 3000))}
+                  stroke={isBlocked ? "#22c55e" : "#ff3e3e"}
+                  strokeWidth={isBlocked ? 1.5 : Math.max(1.5, Math.min(3.5, edge.bandwidth / 15000))}
                   strokeOpacity={0.6}
-                  className="edge-animated"
+                  strokeDasharray={isBlocked ? "3, 3" : undefined}
+                  className={isBlocked ? "" : "edge-animated"}
                 />
                 {/* Attack type label at midpoint */}
                 <text
                   x={(from.x + to.x) / 2}
                   y={(from.y + to.y) / 2 - 6}
                   fontSize="8"
-                  fill="#f59e0b"
+                  fill={isBlocked ? "#22c55e" : "#f59e0b"}
                   textAnchor="middle"
                   fontFamily="'JetBrains Mono', monospace"
                 >
@@ -175,7 +209,7 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
           })}
 
           {/* Nodes */}
-          {nodes.map((node) => {
+          {dynamicNodes.map((node) => {
             const pos = positions[node.id]
             if (!pos) return null
 
@@ -187,9 +221,15 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
             return (
               <g
                 key={node.id}
-                onMouseEnter={() => setTooltip({ x: pos.x, y: pos.y, node })}
+                onMouseEnter={() => {
+                  if (!contextMenu) setTooltip({ x: pos.x, y: pos.y, node })
+                }}
                 onMouseLeave={() => setTooltip({ x: 0, y: 0, node: null })}
-                className="cursor-pointer"
+                onClick={() => {
+                  setTooltip({ x: 0, y: 0, node: null })
+                  setContextMenu({ x: pos.x, y: pos.y, node })
+                }}
+                className={`cursor-pointer ${contextMenu?.node.id === node.id ? 'opacity-100' : contextMenu ? 'opacity-30' : ''} transition-opacity duration-300`}
               >
                 {/* Pulse ring for attackers */}
                 {node.type === 'attacker' && (
@@ -222,11 +262,11 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
                   cx={pos.x}
                   cy={pos.y}
                   r={r}
-                  fill={color.fill}
+                  fill={node.isBlocked ? '#22c55e' : color.fill}
                   fillOpacity={0.15}
-                  stroke={color.stroke}
+                  stroke={node.isBlocked ? '#4ade80' : color.stroke}
                   strokeWidth={2}
-                  filter={filterAttr}
+                  filter={node.isBlocked ? undefined : filterAttr}
                 />
 
                 {/* Inner icon */}
@@ -234,10 +274,10 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
                   x={pos.x}
                   y={pos.y + 4}
                   fontSize="12"
-                  fill={color.fill}
+                  fill={node.isBlocked ? '#22c55e' : color.fill}
                   textAnchor="middle"
                 >
-                  {node.type === 'attacker' ? '⚡' : node.type === 'victim' ? '🖥' : '✓'}
+                  {node.isBlocked ? '🛡️' : node.type === 'attacker' ? '⚡' : node.type === 'victim' ? '🖥' : '✓'}
                 </text>
 
                 {/* IP label */}
@@ -245,7 +285,7 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
                   x={pos.x}
                   y={pos.y + r + 14}
                   fontSize="8"
-                  fill="#94a3b8"
+                  fill={node.isBlocked ? '#4ade80' : '#94a3b8'}
                   textAnchor="middle"
                   fontFamily="'JetBrains Mono', monospace"
                 >
@@ -282,10 +322,131 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
             </div>
           </div>
         )}
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <div
+            className="absolute z-20 glass-card shadow-2xl border border-white/10 rounded-xl overflow-hidden backdrop-blur-md w-52"
+            style={{
+              left: `${(contextMenu.x / 600) * 100}%`,
+              top: `${(contextMenu.y / 320) * 100}%`,
+              transform: 'translate(15px, -15px)',
+            }}
+          >
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
+              <span className={`text-[11px] font-semibold flex items-center gap-1.5 ${
+                contextMenu.node.isBlocked ? 'text-green' :
+                contextMenu.node.type === 'attacker' ? 'text-threat' :
+                contextMenu.node.type === 'victim' ? 'text-amber' : 'text-cyan'
+              }`}>
+                {contextMenu.node.isBlocked ? '🛡️' : '🖥'}
+                {contextMenu.node.id}
+              </span>
+              <button
+                onClick={() => setContextMenu(null)}
+                className="w-5 h-5 rounded hover:bg-white/10 flex items-center justify-center text-text-dim hover:text-text cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <div className="p-1">
+              {/* Attacker (Not Blocked) */}
+              {contextMenu.node.type === 'attacker' && !contextMenu.node.isBlocked && (
+                <>
+                  <button
+                    onClick={() => {
+                      sendAction({ action: 'isolate_ip', ips: [contextMenu.node.id], strategy: 'block' })
+                      setContextMenu(null)
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-threat/10 hover:text-threat rounded-lg transition-colors cursor-pointer text-left font-semibold"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    Block Attacker IP
+                  </button>
+                  <button
+                    onClick={() => {
+                      sendAction({ action: 'chat_command', command: 'Investigate ' + contextMenu.node.id })
+                      setContextMenu(null)
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-white/5 rounded-lg transition-colors cursor-pointer text-left"
+                  >
+                    <Search className="w-3.5 h-3.5 text-cyan" />
+                    Investigate
+                  </button>
+                </>
+              )}
+
+              {/* Attacker (Already Blocked) */}
+              {contextMenu.node.isBlocked && (
+                <button
+                  onClick={() => {
+                    sendAction({ action: 'unblock_ip', ips: [contextMenu.node.id] })
+                    setContextMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-green/10 hover:text-green rounded-lg transition-colors cursor-pointer text-left font-semibold"
+                >
+                  <Shield className="w-3.5 h-3.5 text-green" />
+                  Unblock & Restore IP
+                </button>
+              )}
+
+              {/* Victim Node */}
+              {contextMenu.node.type === 'victim' && (
+                <>
+                  <button
+                    onClick={() => {
+                      sendAction({ action: 'isolate_ip', ips: [contextMenu.node.id], strategy: 'quarantine' })
+                      setContextMenu(null)
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-amber/10 hover:text-amber rounded-lg transition-colors cursor-pointer text-left"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    Quarantine Host
+                  </button>
+                  <button
+                    onClick={() => {
+                      sendAction({ action: 'chat_command', command: 'Compare baselines' })
+                      setContextMenu(null)
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-white/5 rounded-lg transition-colors cursor-pointer text-left"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-cyan" />
+                    Analyze Baselines
+                  </button>
+                </>
+              )}
+
+              {/* Clean/Healthy Nodes */}
+              {contextMenu.node.type === 'clean' && !contextMenu.node.isBlocked && (
+                <button
+                  onClick={() => {
+                    sendAction({ action: 'chat_command', command: 'Compare baselines' })
+                    setContextMenu(null)
+                  }}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-white/5 rounded-lg transition-colors cursor-pointer text-left"
+                >
+                  <Layers className="w-3.5 h-3.5 text-cyan" />
+                  Check Auth Logs
+                </button>
+              )}
+
+              <button
+                onClick={() => {
+                  sendAction({ action: 'chat_command', command: 'triage' })
+                  setContextMenu(null)
+                }}
+                className="w-full flex items-center gap-2 px-2 py-1.5 text-xs text-text hover:bg-white/5 border-t border-white/5 mt-1 rounded-lg transition-colors cursor-pointer text-left text-text-muted"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple" />
+                View Incident Board
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Attack Vectors Table */}
-      {edges.length > 0 && (
+      {dynamicEdges.length > 0 && (
         <div className="rounded-lg bg-black/20 border border-white/5 overflow-hidden">
           <table className="w-full text-[11px]">
             <thead>
@@ -297,14 +458,19 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
               </tr>
             </thead>
             <tbody>
-              {edges.map((edge, i) => (
-                <tr key={i} className="border-b border-white/3 last:border-b-0 hover:bg-white/2">
-                  <td className="px-3 py-1.5 font-mono text-threat">{edge.source}</td>
-                  <td className="px-3 py-1.5 font-mono text-amber">{edge.target}</td>
-                  <td className="px-3 py-1.5">{edge.attackType}</td>
-                  <td className="px-3 py-1.5 text-right font-mono">{edge.bandwidth.toLocaleString()} B/s</td>
-                </tr>
-              ))}
+              {dynamicEdges.map((edge, i) => {
+                const isBlocked = edge.bandwidth === 0
+                return (
+                  <tr key={i} className="border-b border-white/3 last:border-b-0 hover:bg-white/2">
+                    <td className={`px-3 py-1.5 font-mono ${isBlocked ? 'text-green' : 'text-threat'}`}>{edge.source}</td>
+                    <td className="px-3 py-1.5 font-mono text-amber">{edge.target}</td>
+                    <td className={`px-3 py-1.5 ${isBlocked ? 'text-green font-medium' : ''}`}>{edge.attackType}</td>
+                    <td className={`px-3 py-1.5 text-right font-mono ${isBlocked ? 'text-green' : ''}`}>
+                      {isBlocked ? '0 B/s' : `${edge.bandwidth.toLocaleString()} B/s`}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
