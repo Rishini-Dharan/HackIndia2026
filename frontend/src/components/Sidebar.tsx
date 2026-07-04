@@ -16,6 +16,8 @@ export default function Sidebar() {
 
   const blockedCount = useWebSocketStore(s => s.blockedIps.size)
 
+  const isMockMode = useWebSocketStore(s => s.isMockMode)
+
   const toggleSimulation = () => {
     const next = !isSimulating
     useWebSocketStore.setState({ isSimulating: next })
@@ -41,17 +43,19 @@ export default function Sidebar() {
       <div className="p-4 space-y-3">
         <div className="glass-card p-3">
           <div className="flex items-center gap-2 mb-2">
-            <div className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
+            <div className={`status-dot ${isMockMode ? 'connected' : isConnected ? 'connected' : 'disconnected'}`} />
             <span className="text-xs font-medium text-text-muted">
-              {isConnected ? 'Connected' : 'Reconnecting...'}
+              {isMockMode ? 'Sandbox Mode' : isConnected ? 'Connected' : 'Reconnecting...'}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {isConnected
+            {isMockMode || isConnected
               ? <Wifi className="w-3.5 h-3.5 text-green" />
               : <WifiOff className="w-3.5 h-3.5 text-red" />
             }
-            <span className="text-xs text-text-dim font-mono">ws://localhost:8000</span>
+            <span className="text-xs text-text-dim font-mono">
+              {isMockMode ? 'client-side sandbox' : 'ws://localhost:8000'}
+            </span>
           </div>
         </div>
 
