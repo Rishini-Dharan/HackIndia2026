@@ -518,6 +518,32 @@ async def _mock_route(user_text: str) -> list[dict]:
             },
         ]
 
+    # ── Joke intents ──────────────────────────────
+    if any(kw in s for kw in ["joke", "jokes", "funny"]):
+        jokes = [
+            "Why do security analysts sleep with the lights on? Because the malware is afraid of the screen glare! 💻",
+            "There are 10 types of people in the world: those who understand binary, and those who don't. 🤖",
+            "Why did the hacker get locked out of his house? Because he forgot to configure port forwarding! 🚪",
+            "How does a cybersecurity expert make their coffee? They use a secure filter to block all grounds! ☕"
+        ]
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": random.choice(jokes),
+            }
+        ]
+
+    # ── Weather intents ───────────────────────────
+    if any(kw in s for kw in ["weather", "forecast", "temperature"]):
+        return [
+            {
+                "type": "chat",
+                "role": "agent",
+                "content": "🌤️ **Security Weather Report:** 100% chance of inbound packet storms, high pressure on port 445 (SMB), and a heavy blanket of encryption threat alerts. Keep your firewall umbrellas ready! ☔",
+            }
+        ]
+
     # ── Conversational / Greeting intents ─────────────────────────
     greetings = ["hi", "hello", "hey", "greetings", "good morning", "good afternoon", "good evening", "sup", "yo", "howdy", "hola"]
     if any(s.strip() == g or s.startswith(g + " ") or s.startswith(g + ",") or s.startswith(g + "!") for g in greetings):
@@ -760,8 +786,6 @@ async def _ollama_route(user_text: str) -> list[dict]:
         ]
 
 
-# ── Public Router ────────────────────────────────────────────────
-
 async def plan_investigation(user_text: str) -> list[dict]:
     """
     Main entry point. Plans security workflows through the configured LLM provider.
@@ -771,68 +795,30 @@ async def plan_investigation(user_text: str) -> list[dict]:
 
     if provider == "groq":
         if not GROQ_API_KEY:
-            return [
-                {
-                    "type": "chat",
-                    "role": "agent",
-                    "content": (
-                        "⚠️ LLM provider is set to Groq, but GROQ_API_KEY is not configured. "
-                        "Please set GROQ_API_KEY in your .env file."
-                    ),
-                }
-            ]
+            print("[LLM] GROQ_API_KEY not configured, falling back to mock mode")
+            return await _mock_route(user_text)
         try:
             return await _groq_route(user_text)
         except Exception as e:
-            print(f"[LLM] Groq error: {e}. No mock fallback enabled.")
-            return [
-                {
-                    "type": "chat",
-                    "role": "agent",
-                    "content": (
-                        "⚠️ Q-Guardian OS could not reach Groq. "
-                        "Please check GROQ_BASE_URL, GROQ_API_KEY, and your network connectivity."
-                    ),
-                }
-            ]
+            print(f"[LLM] Groq error: {e}. Falling back to mock mode.")
+            return await _mock_route(user_text)
 
     if provider == "openai":
         if not OPENAI_API_KEY:
-            return [
-                {
-                    "type": "chat",
-                    "role": "agent",
-                    "content": (
-                        "⚠️ LLM provider is set to OpenAI, but OPENAI_API_KEY is not configured. "
-                        "Please set OPENAI_API_KEY in your .env file."
-                    ),
-                }
-            ]
+            print("[LLM] OPENAI_API_KEY not configured, falling back to mock mode")
+            return await _mock_route(user_text)
         try:
             return await _openai_route(user_text)
         except Exception as e:
-            print(f"[LLM] OpenAI error: {e}. No mock fallback enabled.")
-            return [
-                {
-                    "type": "chat",
-                    "role": "agent",
-                    "content": (
-                        "⚠️ Q-Guardian OS could not reach OpenAI. "
-                        "Please check your API key and network connectivity."
-                    ),
-                }
-            ]
+            print(f"[LLM] OpenAI error: {e}. Falling back to mock mode.")
+            return await _mock_route(user_text)
 
     if provider == "ollama":
-        return await _ollama_route(user_text)
+        try:
+            return await _ollama_route(user_text)
+        except Exception as e:
+            print(f"[LLM] Ollama error: {e}. Falling back to mock mode.")
+            return await _mock_route(user_text)
 
-    return [
-        {
-            "type": "chat",
-            "role": "agent",
-            "content": (
-                "⚠️ Invalid LLM_PROVIDER configured. "
-                "Set LLM_PROVIDER to one of: groq, openai, ollama, or mock."
-            ),
-        }
-    ]
+    # Default to mock
+    return await _mock_route(user_text)

@@ -551,12 +551,36 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
       // Emulate Chat response in local mock mode
       setTimeout(() => {
-        const s = content.toLowerCase()
+        const s = content.toLowerCase().trim()
         let reply = "Hello! I am Q-Guardian OS. I dynamically compile security dashboards. Try asking me to **'show live network traffic'**, **'analyze the threat topology'**, **'open triage board'**, or **'show firewall rules'**."
         let widget: WidgetDescriptor | null = null
         let newWorkspaceLayout: WidgetDescriptor[] | null = null
 
-        if (anyKeyword(s, ["traffic", "monitor", "live", "stream", "packets", "bandwidth", "network"])) {
+        const greetings = ["hi", "hello", "hey", "greetings", "yo", "sup", "howdy", "hola"]
+        const thanks = ["thanks", "thank you", "thx", "appreciate", "nice", "cool", "great", "awesome", "good job", "well done"]
+
+        if (anyKeyword(s, ["joke", "jokes", "funny"])) {
+          const jokes = [
+            "Why do security analysts sleep with the lights on? Because the malware is afraid of the screen glare! 💻",
+            "There are 10 types of people in the world: those who understand binary, and those who don't. 🤖",
+            "Why did the hacker get locked out of his house? Because he forgot to configure port forwarding! 🚪",
+            "How does a cybersecurity expert make their coffee? They use a secure filter to block all grounds! ☕"
+          ]
+          reply = jokes[Math.floor(Math.random() * jokes.length)]
+        }
+        else if (anyKeyword(s, ["weather", "forecast", "temperature"])) {
+          reply = "🌤️ **Security Weather Report:** 100% chance of inbound packet storms, high pressure on port 445 (SMB), and a heavy blanket of encryption threat alerts. Keep your firewall umbrellas ready! ☔"
+        }
+        else if (greetings.some(g => s === g || s.startsWith(g + " ") || s.startsWith(g + ",") || s.startsWith(g + "!"))) {
+          reply = "Hello! 🛡️ Welcome to Q-Guardian OS. I'm your adaptive AI investigation assistant. I can analyze threats, monitor live traffic, compose investigation workspaces, and help you contain incidents. Try asking to **'show live network traffic'** or **'simulate attack'** to see me in action!"
+        }
+        else if (thanks.some(t => s.includes(t))) {
+          reply = "You're very welcome! 🔒 I'll keep monitoring your telemetry feeds. Let me know if you need to run any baseline checks or isolate any hosts."
+        }
+        else if (anyKeyword(s, ["who are you", "what are you", "your name", "about you", "what can you do", "capabilities"])) {
+          reply = "🛡️ I'm **Q-Guardian OS** — an Adaptive Investigation Operating System. I don't just show static dashboards; I visually express AI decisions by dynamically composing and evolving your investigation workspace in real-time."
+        }
+        else if (anyKeyword(s, ["traffic", "monitor", "live", "stream", "packets", "bandwidth", "network"])) {
           reply = "📡 Mounting the live traffic monitor. Telemetry data is streaming in real-time."
           widget = {
             id: `traffic-${Math.floor(Math.random() * 9000) + 1000}`,
