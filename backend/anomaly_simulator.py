@@ -15,6 +15,9 @@ import asyncio
 import random
 import time
 from datetime import datetime, timezone
+from ml_detector import MLAnomalyDetector
+
+detector = MLAnomalyDetector()
 
 
 # ── Realistic Traffic Configuration ──────────────────────────────
@@ -194,7 +197,7 @@ async def anomaly_simulator(manager):
                 if IS_ATTACK_ACTIVE:
                     # ── Attack mode: mix attack events with baseline ──────────
                     # Generate 1 attack event + 1-2 baseline events per tick
-                    attack_event = _generate_attack_event()
+                    attack_event = detector.classify(_generate_attack_event())
                     await manager.broadcast({
                         "type": "telemetry",
                         "data": attack_event,
@@ -205,7 +208,7 @@ async def anomaly_simulator(manager):
                     for _ in range(baseline_count):
                         await manager.broadcast({
                             "type": "telemetry",
-                            "data": _generate_baseline_event(),
+                            "data": detector.classify(_generate_baseline_event()),
                         })
 
                     # Proactive workspace mount on first detection
@@ -232,7 +235,7 @@ async def anomaly_simulator(manager):
                     for _ in range(event_count):
                         await manager.broadcast({
                             "type": "telemetry",
-                            "data": _generate_baseline_event(),
+                            "data": detector.classify(_generate_baseline_event()),
                         })
 
             await asyncio.sleep(0.5)
