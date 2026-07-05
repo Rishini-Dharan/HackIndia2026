@@ -2,7 +2,7 @@
  * Q-Guardian OS — Root Application Component
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useWebSocketStore } from './store/useWebSocketStore'
 import Sidebar from './components/Sidebar'
 import ChatCanvas from './components/ChatCanvas'
@@ -14,6 +14,18 @@ export default function App() {
   const activeWorkspace = useWebSocketStore(s => s.activeWorkspace)
   const mountedWidgets = useWebSocketStore(s => s.mountedWidgets)
 
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('qgos-theme') as 'dark' | 'light') || 'dark'
+  })
+
+  const toggleTheme = () => {
+    setTheme(t => {
+      const next = t === 'dark' ? 'light' : 'dark'
+      localStorage.setItem('qgos-theme', next)
+      return next
+    })
+  }
+
   useEffect(() => {
     connect()
     return () => {
@@ -22,8 +34,8 @@ export default function App() {
   }, [connect])
 
   return (
-    <div className="flex h-dvh w-full bg-void overflow-hidden">
-      <Sidebar />
+    <div className={`flex h-dvh w-full bg-void overflow-hidden ${theme === 'light' ? 'light-mode' : ''}`}>
+      <Sidebar theme={theme} toggleTheme={toggleTheme} />
       <main className="flex-1 flex min-w-0">
         {activeWorkspace ? (
           <div className="grid grid-cols-12 h-full w-full">

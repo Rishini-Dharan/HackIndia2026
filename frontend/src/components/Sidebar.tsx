@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { useWebSocketStore } from '../store/useWebSocketStore'
-import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban, Layers, Search, FileText } from 'lucide-react'
+import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban, Layers, Search, FileText, Sun, Moon } from 'lucide-react'
 
-export default function Sidebar() {
+export default function Sidebar({ theme, toggleTheme }: { theme: 'dark' | 'light'; toggleTheme: () => void }) {
   const isConnected = useWebSocketStore(s => s.isConnected)
   const widgetCount = useWebSocketStore(s => s.mountedWidgets.length)
   const telemetryCount = useWebSocketStore(s => s.telemetryBuffer.length)
@@ -30,7 +30,7 @@ export default function Sidebar() {
   return (
     <aside className="w-64 shrink-0 bg-abyss border-r border-border flex flex-col">
       {/* Brand */}
-      <div className="p-5 border-b border-border">
+      <div className="p-5 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan to-blue flex items-center justify-center shadow-lg shadow-cyan/20">
             <Shield className="w-5 h-5 text-void" strokeWidth={2.5} />
@@ -40,6 +40,13 @@ export default function Sidebar() {
             <p className="text-xs font-medium text-cyan tracking-widest uppercase">OS</p>
           </div>
         </div>
+        <button
+          onClick={toggleTheme}
+          className="p-1.5 rounded-lg border border-border bg-deep/40 text-text-dim hover:text-cyan hover:border-cyan/40 transition-colors cursor-pointer"
+          title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+        >
+          {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+        </button>
       </div>
 
       {/* Scrollable Sidebar Content Area */}

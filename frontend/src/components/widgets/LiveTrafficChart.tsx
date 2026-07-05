@@ -124,16 +124,16 @@ export default function LiveTrafficChart({ props: _props }: { props: Record<stri
                   <stop offset="100%" stopColor="#ff3e3e" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#243052" strokeOpacity={0.4} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.4} />
               <XAxis
                 dataKey="time"
-                stroke="#64748b"
+                stroke="var(--color-text-dim)"
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                stroke="#64748b"
+                stroke="var(--color-text-dim)"
                 fontSize={10}
                 tickLine={false}
                 axisLine={false}
@@ -141,11 +141,11 @@ export default function LiveTrafficChart({ props: _props }: { props: Record<stri
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0f1629',
-                  border: '1px solid #243052',
+                  backgroundColor: 'var(--color-elevated)',
+                  border: '1px solid var(--color-border)',
                   borderRadius: '8px',
                   fontSize: '11px',
-                  color: '#e2e8f0',
+                  color: 'var(--color-text)',
                 }}
               />
               <Area
