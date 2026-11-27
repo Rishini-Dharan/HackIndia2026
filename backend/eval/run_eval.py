@@ -20,6 +20,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
+# Same .env the backend uses (repo root), loaded before the orchestrator reads its keys.
+from dotenv import load_dotenv  # noqa: E402
+
+load_dotenv(HERE.parent.parent / ".env")
+
 import llm_orchestrator as llm  # noqa: E402
 
 
