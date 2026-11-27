@@ -12,5 +12,8 @@ services:
     envVars:
       - key: GROQ_API_KEY
         sync: false
+      # Shared secret the Java ingester must send as X-Ingest-Token.
+      - key: QG_INGEST_TOKEN
+        generateValue: true
       - key: CORS_ORIGINS
         value: https://rishini-dharan.github.io

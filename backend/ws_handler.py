@@ -11,9 +11,27 @@ import qdrant_memory
 # Global Active Workspace state tracking for dynamic modifications
 CURRENT_WORKSPACE = {}
 
-LAST_EVIDENCE: list[str] = [
-    "No live detection yet: workspace opened from the demo template.",
-]
+TEMPLATE_EVIDENCE = ["No live detection yet: workspace opened from the demo template."]
+LAST_EVIDENCE: list[str] = list(TEMPLATE_EVIDENCE)
+
+# Addresses baked into the demo template. A live detection swaps in its own.
+TEMPLATE_ATTACKER, TEMPLATE_VICTIM = "45.33.12.99", "192.168.1.10"
+ATTACKER_IP, VICTIM_IP = TEMPLATE_ATTACKER, TEMPLATE_VICTIM
+
+HYPOTHESES = {
+    "Ransomware": "External endpoint {src} is pushing bulk SMB transfers to {dst}, consistent with ransomware lateral movement.",
+    "DDoS": "{src} is flooding {dst} with a high connection rate on a single service.",
+    "PortScan": "{src} is probing many services on {dst}, consistent with reconnaissance.",
+    "BruteForce": "{src} is making repeated SSH connections to {dst}, consistent with password guessing.",
+}
+
+
+def retarget(obj):
+    """Replace the template attacker/victim addresses with the live ones."""
+    if (ATTACKER_IP, VICTIM_IP) == (TEMPLATE_ATTACKER, TEMPLATE_VICTIM):
+        return obj
+    text = json.dumps(obj).replace(TEMPLATE_ATTACKER, ATTACKER_IP).replace(TEMPLATE_VICTIM, VICTIM_IP)
+    return json.loads(text)
 
 
 def _evidence_from(event: dict) -> list[str]:
@@ -26,14 +44,22 @@ def _evidence_from(event: dict) -> list[str]:
 
 def reset_current_workspace(event: dict | None = None):
     """Build the investigation workspace. With a detection event, the evidence,
-    confidence and node addresses come from that event instead of the template."""
-    global CURRENT_WORKSPACE, LAST_EVIDENCE
+    confidence, hypothesis and node addresses come from that event instead of the template."""
+    global CURRENT_WORKSPACE, LAST_EVIDENCE, ATTACKER_IP, VICTIM_IP
     _build_template_workspace()
-    if event:
-        LAST_EVIDENCE = _evidence_from(event)
-        CURRENT_WORKSPACE["evidence"] = LAST_EVIDENCE
-        CURRENT_WORKSPACE["confidence"] = round(event["score"] * 100, 1)
-        CURRENT_WORKSPACE["threatType"] = event["attack_type"]
+    if not event:
+        ATTACKER_IP, VICTIM_IP = TEMPLATE_ATTACKER, TEMPLATE_VICTIM
+        LAST_EVIDENCE = list(TEMPLATE_EVIDENCE)
+        return
+    ATTACKER_IP, VICTIM_IP = event["src_ip"], event["dst_ip"]
+    CURRENT_WORKSPACE = retarget(CURRENT_WORKSPACE)
+    LAST_EVIDENCE = _evidence_from(event)
+    CURRENT_WORKSPACE["evidence"] = LAST_EVIDENCE
+    CURRENT_WORKSPACE["confidence"] = round(event["score"] * 100, 1)
+    CURRENT_WORKSPACE["threatType"] = event["attack_type"]
+    CURRENT_WORKSPACE["title"] = f"{event['attack_type']} investigation"
+    template = HYPOTHESES.get(event["attack_type"], "{src} triggered a {kind} detection against {dst}.")
+    CURRENT_WORKSPACE["hypothesis"] = template.format(src=ATTACKER_IP, dst=VICTIM_IP, kind=event["attack_type"])
 
 
 def _build_template_workspace():
@@ -360,7 +386,7 @@ async def handle_ws_message(
                 case_id="INV-412",
                 status="neutralized",
                 evidence=LAST_EVIDENCE,
-                hypothesis="Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
+                hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""),
                 strategy=strategy,
                 notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}"
             )
@@ -448,6 +474,7 @@ async def handle_ws_message(
                     },
                 ]
             }
+            CURRENT_WORKSPACE = retarget(CURRENT_WORKSPACE)
 
             await manager.broadcast({
                 "type": "workspace_mount",

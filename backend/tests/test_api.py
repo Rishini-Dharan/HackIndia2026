@@ -54,3 +54,69 @@ def test_blocked_source_is_dropped():
         assert r.json()["threats"] == 0
     finally:
         sim.BLOCKED_IPS.clear()
+
+
+def test_ingest_requires_token_when_configured(monkeypatch):
+    monkeypatch.setattr(main, "INGEST_TOKEN", "s3cret")
+    event = {"events": [{"src_ip": "10.0.0.1", "dst_ip": "10.0.0.2", "port": 443, "bytes": 100}]}
+    with TestClient(main.app) as client:
+        assert client.post("/ingest", json=event).status_code == 401
+        assert client.post("/ingest", json=event, headers={"X-Ingest-Token": "wrong"}).status_code == 401
+        assert client.post("/ingest", json=event, headers={"X-Ingest-Token": "s3cret"}).status_code == 200
+
+
+def test_websocket_requires_token_when_configured(monkeypatch):
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+
+    monkeypatch.setattr(main, "WS_TOKEN", "s3cret")
+    with TestClient(main.app) as client:
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.receive_json()
+        with client.websocket_connect("/ws/chat?token=s3cret") as ws:
+            assert ws.receive_json()["type"] == "chat"
+
+
+def _scan_batch(src):
+    return {"events": [{"ts": "1720000000", "src_ip": src, "dst_ip": "10.0.0.5", "port": p * 13, "bytes": 0}
+                       for p in range(1, 40)]}
+
+
+def test_live_detection_retargets_workspace_to_real_attacker():
+    import ws_handler
+    sim.PROACTIVE_TRIGGERED = False
+    sim.BLOCKED_IPS.clear()
+    with TestClient(main.app) as client:
+        client.post("/ingest", json=_scan_batch("198.51.100.7"))
+    ws = ws_handler.CURRENT_WORKSPACE
+    text = str(ws)
+    assert ws["threatType"] == "PortScan"
+    assert "198.51.100.7" in ws["hypothesis"]
+    assert "45.33.12.99" not in text, "template attacker IP leaked into a live workspace"
+    mitigation = next(w for w in ws["layout"] if w["component"] == "MitigationAction")
+    assert mitigation["props"]["threatIps"] == ["198.51.100.7"]
+    ws_handler.reset_current_workspace()
+
+
+def test_containment_rearms_proactive_alerts():
+    sim.PROACTIVE_TRIGGERED = True
+    sim.block_ips(["198.51.100.7"])
+    assert sim.PROACTIVE_TRIGGERED is False
+    sim.unblock_all()
+
+
+def test_empty_batch_does_not_pause_simulator_and_epoch_ts_is_converted():
+    sim.LAST_INGEST_AT = 0.0
+    with TestClient(main.app) as client:
+        client.post("/ingest", json={"events": []})
+        assert sim.LAST_INGEST_AT == 0.0
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.receive_json(); ws.receive_json()
+            client.post("/ingest", json={"events": [
+                {"ts": "1720000000", "src_ip": "10.0.1.9", "dst_ip": "10.0.0.2", "port": 443, "bytes": 900}]})
+            for _ in range(20):
+                m = ws.receive_json()
+                if m["type"] == "telemetry" and m["data"]["src_ip"] == "10.0.1.9":
+                    break
+    assert m["data"]["ts"].startswith("2024-07-03T")
