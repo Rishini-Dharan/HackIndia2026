@@ -94,6 +94,21 @@ export const BACKEND_LABEL: string = (() => {
   }
 })()
 
+/** Adds the optional WebSocket token. A token in a public bundle is visible to anyone,
+ *  so this only protects private deployments; the public demo runs without one. */
+function withToken(url: string): string {
+  const token = import.meta.env.VITE_WS_TOKEN
+  return token ? `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : url
+}
+
+// While in sandbox mode, keep probing the backend so a sleeping free-tier host
+// (Render spins down when idle) takes over as soon as it wakes.
+const PROBE_FAST_MS = 10_000
+const PROBE_SLOW_MS = 60_000
+const PROBE_FAST_ATTEMPTS = 18 // ~3 minutes of fast probing, then once a minute
+let backendProbeTimer: ReturnType<typeof setTimeout> | null = null
+let probeAttempts = 0
+
 let reconnectAttempts = 0
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let mockTelemetryTimer: ReturnType<typeof setInterval> | null = null
@@ -357,12 +372,67 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       id: generateId(),
       type: 'chat',
       role: 'agent',
-      content: "🤖 **Local Sandbox Activated**\n\nI couldn't establish a connection to the Q-Guardian FastAPI backend at `" + BACKEND_URL + "` (this usually happens if the backend is not running or when hosted statically).\n\nNo worries! I've loaded a fully interactive **client-side simulator** in your browser. \n\nYou can click **'Simulate Attack'** in the sidebar, watch telemetry stream, interact with me in chat (try asking to *'show live traffic'*, *'open triage board'*, *'show firewall rules'*), and execute the **Mitigation containment** rules!",
+      content: "🤖 **Local Sandbox Activated**\n\nI couldn't reach the Q-Guardian backend at `" + BACKEND_URL + "` yet. The hosted backend sleeps when idle and can take up to a minute to wake; **I'll keep trying and switch to it automatically.**\n\nMeanwhile, this is a **client-side simulator** in your browser.\n\nYou can click **'Simulate Attack'** in the sidebar, watch telemetry stream, interact with me in chat (try asking to *'show live traffic'*, *'open triage board'*, *'show firewall rules'*), and execute the **Mitigation containment** rules!",
       timestamp: Date.now()
     }
 
     set({ messages: [...get().messages, sandboxMsg] })
     startMockTelemetryLoop()
+    probeAttempts = 0
+    scheduleBackendProbe()
+  }
+
+  function scheduleBackendProbe() {
+    if (backendProbeTimer) clearTimeout(backendProbeTimer)
+    const delay = probeAttempts < PROBE_FAST_ATTEMPTS ? PROBE_FAST_MS : PROBE_SLOW_MS
+    backendProbeTimer = setTimeout(probeBackend, delay)
+  }
+
+  function probeBackend() {
+    if (!get().isMockMode) return
+    probeAttempts++
+    let probe: WebSocket
+    try {
+      probe = new WebSocket(withToken(BACKEND_URL))
+    } catch {
+      scheduleBackendProbe()
+      return
+    }
+    let opened = false
+    probe.onopen = () => {
+      opened = true
+      probe.close()
+      switchToLiveBackend()
+    }
+    probe.onclose = () => {
+      if (!opened) scheduleBackendProbe()
+    }
+  }
+
+  function switchToLiveBackend() {
+    if (backendProbeTimer) clearTimeout(backendProbeTimer)
+    backendProbeTimer = null
+    if (mockTelemetryTimer) {
+      clearInterval(mockTelemetryTimer)
+      mockTelemetryTimer = null
+    }
+    // Drop simulated state so it isn't mixed with live telemetry.
+    set({
+      isMockMode: false,
+      isSimulating: false,
+      activeWorkspace: null,
+      mountedWidgets: [],
+      telemetryBuffer: [],
+      blockedIps: new Set<string>(),
+      messages: [...get().messages, {
+        id: generateId(),
+        type: 'chat',
+        role: 'agent',
+        content: '🟢 **Live backend is up.** Switched from the browser sandbox to the real backend; telemetry and replies are live from here on.',
+        timestamp: Date.now(),
+      }],
+    })
+    get().connect()
   }
 
   return {
@@ -387,10 +457,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       if (existing && existing.readyState === WebSocket.OPEN) return
 
       try {
-        // A token baked into a public bundle is visible to anyone, so this only protects
-        // private deployments; the public demo should run without QG_WS_TOKEN.
-        const token = import.meta.env.VITE_WS_TOKEN
-        const ws = new WebSocket(token ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : wsUrl)
+        const ws = new WebSocket(withToken(wsUrl))
 
         ws.onopen = () => {
           console.log('[WS] Connected')
