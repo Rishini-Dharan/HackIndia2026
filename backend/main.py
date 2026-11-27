@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 # Load .env from parent directory (qguardian-os/.env)
 _env_path = Path(__file__).resolve().parent.parent / ".env"
-if _env_path.exists():
+if _env_path.exists() and not os.getenv("QG_SKIP_DOTENV"):  # tests set this so they never use real keys
     load_dotenv(_env_path)
     print(f"[CONFIG] Loaded env from {_env_path}")
 

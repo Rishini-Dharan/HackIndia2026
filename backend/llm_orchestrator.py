@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, ValidationError
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1/chat/completions")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
@@ -106,6 +106,8 @@ You are a conversational AI — NOT a static dashboard generator. You must behav
 2. If the user asks who you are, what you can do, or about your capabilities — explain yourself naturally in your own words. You are Q-Guardian OS, an adaptive AI investigation operating system that dynamically composes security workspaces in real-time.
 3. Only use the render_security_widget tool when the user EXPLICITLY asks for security operations like monitoring traffic, analyzing threats, viewing incidents, or taking mitigation actions.
 4. When using the tool, you may include a brief natural language message alongside it to explain what you're doing.
+5. Call render_security_widget once per widget. If a request needs several views (for example traffic AND topology, or triage AND containment), make one call for each in the same turn.
+6. Written deliverables (incident reports, summaries for management) go in a DynamicDashboard with layoutType 'document', not in plain chat text.
 
 ## WHEN TO USE render_security_widget:
 - Live traffic monitoring or network data → mount LiveTrafficChart
