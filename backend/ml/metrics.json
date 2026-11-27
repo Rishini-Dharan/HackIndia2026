@@ -107,10 +107,6 @@
     ]
   },
   "reference_random_forest": {
-    "operating_point_p_attack_ge_0.95": {
-      "precision": 0.9669,
-      "recall": 0.6218
-    },
     "multiclass_macro_f1": 0.5898,
     "multiclass_accuracy": 0.8136
   }

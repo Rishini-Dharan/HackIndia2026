@@ -152,8 +152,7 @@ def main():
         "per_class": {c: {k: round(v, 4) for k, v in report[c].items()} for c in CLASSES},
         "confusion_matrix": {"labels": CLASSES, "rows_true_cols_pred": confusion_matrix(yte, pred).tolist()},
         "reference_random_forest": {
-            "operating_point_p_attack_ge_0.95": _binary(is_attack, (attack_score >= 0.95).astype(int)),
-        "multiclass_macro_f1": round(float(f1_score(yte, rf_pred, average="macro")), 4),
+            "multiclass_macro_f1": round(float(f1_score(yte, rf_pred, average="macro")), 4),
             "multiclass_accuracy": round(float((rf_pred == yte).mean()), 4),
         },
     }
