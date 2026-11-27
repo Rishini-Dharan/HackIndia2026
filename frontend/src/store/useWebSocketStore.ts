@@ -94,11 +94,30 @@ export const BACKEND_LABEL: string = (() => {
   }
 })()
 
-/** Adds the optional WebSocket token. A token in a public bundle is visible to anyone,
- *  so this only protects private deployments; the public demo runs without one. */
+/** Stable per-browser id, so each visitor gets a private backend session that
+ *  survives reloads. Falls back to a per-page id if storage is unavailable. */
+function getClientId(): string {
+  const fresh = () => (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`).replace(/[^A-Za-z0-9-]/g, '')
+  try {
+    let id = localStorage.getItem('qg-client-id')
+    if (!id || !/^[A-Za-z0-9-]{8,64}$/.test(id)) {
+      id = fresh()
+      localStorage.setItem('qg-client-id', id)
+    }
+    return id
+  } catch {
+    return fresh()
+  }
+}
+const CLIENT_ID = getClientId()
+
+/** Adds the visitor's client id and the optional token. A token in a public bundle
+ *  is visible to anyone, so it only protects private deployments. */
 function withToken(url: string): string {
+  const params = new URLSearchParams({ client: CLIENT_ID })
   const token = import.meta.env.VITE_WS_TOKEN
-  return token ? `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : url
+  if (token) params.set('token', token)
+  return `${url}${url.includes('?') ? '&' : '?'}${params}`
 }
 
 // While in sandbox mode, keep probing the backend so a sleeping free-tier host

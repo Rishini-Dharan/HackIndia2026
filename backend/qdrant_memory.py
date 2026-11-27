@@ -145,6 +145,20 @@ def get_embedding(text: str) -> list[float]:
     return _get_hashing_embedding(text, dimensions=EMBEDDING_DIM)
 
 
+def _client_id() -> str:
+    """Memories belong to the visitor session that created them."""
+    from session import current_client_id
+    return current_client_id()
+
+
+def _scope(category: str | None = None):
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    must = [FieldCondition(key="client_id", match=MatchValue(value=_client_id()))]
+    if category:
+        must.append(FieldCondition(key="category", match=MatchValue(value=category)))
+    return Filter(must=must)
+
+
 def add_memory(text: str, category: str, metadata: dict = None) -> bool:
     """Adds a new event or operator action to vector memory."""
     try:
@@ -152,7 +166,8 @@ def add_memory(text: str, category: str, metadata: dict = None) -> bool:
         payload = {
             "text": text,
             "category": category,
-            **(metadata or {})
+            **(metadata or {}),
+            "client_id": _client_id(),
         }
         
         import uuid
@@ -180,17 +195,8 @@ def search_memory(query: str, limit: int = 5, category: str = None) -> list[dict
         vector = get_embedding(query)
         
         from qdrant_client.models import Filter, FieldCondition, MatchValue
-        query_filter = None
-        if category:
-            query_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="category",
-                        match=MatchValue(value=category)
-                    )
-                ]
-            )
-            
+        query_filter = _scope(category)
+
         results = qdrant_client.query_points(
             collection_name=COLLECTION_NAME,
             query=vector,
@@ -205,16 +211,13 @@ def search_memory(query: str, limit: int = 5, category: str = None) -> list[dict
 
 
 def clear_memories():
-    """Wipes all points in the collection (useful for clearing session)."""
+    """Deletes the active visitor's memories only."""
+    from qdrant_client.models import FilterSelector
     try:
-        qdrant_client.delete_collection(COLLECTION_NAME)
-        qdrant_client.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
-        )
-        print("[QDRANT] Collection reset successfully.")
+        qdrant_client.delete(collection_name=COLLECTION_NAME, points_selector=FilterSelector(filter=_scope()))
+        print("[QDRANT] Cleared memories for this session.")
     except Exception as e:
-        print(f"[QDRANT] Error resetting collection: {e}")
+        print(f"[QDRANT] Error clearing memories: {e}")
 
 
 def add_investigation(
@@ -271,7 +274,7 @@ def get_latest_investigation() -> dict | None:
     try:
         points, _ = qdrant_client.scroll(
             collection_name=COLLECTION_NAME,
-            scroll_filter=Filter(must=[FieldCondition(key="category", match=MatchValue(value="investigations"))]),
+            scroll_filter=_scope("investigations"),
             limit=1000,
             with_payload=True,
             with_vectors=False,
