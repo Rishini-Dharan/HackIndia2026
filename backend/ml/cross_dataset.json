@@ -1,0 +1,46 @@
+{
+  "features": [
+    "log_bytes",
+    "log_count",
+    "diff_srv_rate",
+    "same_srv_rate",
+    "proto_tcp",
+    "proto_udp",
+    "proto_icmp",
+    "svc_http",
+    "svc_ssh",
+    "svc_smb",
+    "svc_dns"
+  ],
+  "unsw_test_rows": 82332,
+  "nsl_model_on_unsw_test": {
+    "f1": 0.3033,
+    "precision": 0.3219,
+    "recall": 0.2867,
+    "roc_auc": 0.2956
+  },
+  "unsw_logistic_regression": {
+    "f1": 0.7436,
+    "precision": 0.7904,
+    "recall": 0.702,
+    "roc_auc": 0.8087
+  },
+  "unsw_gradient_boosting": {
+    "f1": 0.8404,
+    "precision": 0.7511,
+    "recall": 0.9537,
+    "roc_auc": 0.9393,
+    "at_0.95": {
+      "f1": 0.8307,
+      "precision": 0.9816,
+      "recall": 0.72,
+      "roc_auc": 0.9393
+    }
+  },
+  "unsw_gradient_boosting_on_demo_simulator": {
+    "benign_flagged_at_0.95": 0.427,
+    "synthetic_port_scan_score": 0.0083,
+    "synthetic_flood_score": 0.0345
+  },
+  "conclusion": "The NSL-KDD model does not transfer to UNSW-NB15. On UNSW-NB15 the window features carry signal a non-linear model can use, but that model misreads the demo simulator's traffic, so the live detector stays on NSL-KDD until the simulator replays real flows."
+}

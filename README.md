@@ -34,6 +34,16 @@ All numbers are reproducible from this repo.
 
 The model only uses features the runtime can compute from a sliding window (bytes, connection count, service mix, protocol), so a random forest on the same features gets just 0.81 multiclass accuracy against 0.71 for the linear model. The detector stays linear so it runs on NumPy alone. R2L and U2R attacks are mostly missed; they need payload features this pipeline does not see. At the 0.95 threshold, the detector flagged 0 of 2,000 simulated benign events.
 
+**Does it generalize?** (`backend/ml/cross_dataset.json`, UNSW-NB15: a 2015 testbed with nine modern attack families, 82,332 held-out flows, same 11 features)
+
+| Model | F1 | ROC AUC |
+|---|---|---|
+| Deployed NSL-KDD model, applied to UNSW-NB15 | 0.30 | 0.30 |
+| Logistic regression trained on UNSW-NB15 | 0.74 | 0.81 |
+| Gradient boosting trained on UNSW-NB15 | 0.84 | 0.94 |
+
+The NSL-KDD model doesn't transfer: on modern traffic it ranks worse than chance. The window features themselves do carry signal, since gradient boosting reaches AUC 0.94 on UNSW-NB15. But that model misreads the demo's simulated traffic: it flags 43% of benign events and misses the synthetic scan and flood. So the live detector stays on NSL-KDD. Moving to UNSW-NB15 first needs a simulator that replays real flows instead of generating its own. Reproduce with `python ml/train.py --dataset unsw ...` and `python ml/compare_datasets.py ...`.
+
 **Ingestion**: about **4.0M records/s** parse and serialize on one core (Java 21, laptop CPU, `java TelemetryIngestion --bench 2000000`, 3 runs: 3.9M to 4.1M).
 
 **Planner eval** (`backend/eval`, 20 requests, pass means the exact set of widgets mounted):

@@ -101,15 +101,70 @@ def _binary(y, yhat):
     return {"precision": round(tp / max(1, tp + fp), 4), "recall": round(tp / max(1, tp + fn), 4)}
 
 
+# ── UNSW-NB15 (2015 testbed, nine modern attack families) ──────────────
+# https://research.unsw.edu.au/projects/unsw-nb15-dataset
+UNSW_CLASSES = ["normal", "generic", "exploits", "fuzzers", "dos", "reconnaissance",
+                "analysis", "backdoor", "shellcode", "worms"]
+
+
+def load_unsw(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    df["category"] = df["attack_cat"].str.strip().str.lower()
+    unknown = set(df["category"]) - set(UNSW_CLASSES)
+    if unknown:
+        raise ValueError(f"unmapped UNSW-NB15 categories: {unknown}")
+    return df
+
+
+def featurize_unsw(df: pd.DataFrame) -> np.ndarray:
+    """Same 11 window features as NSL-KDD. UNSW's ct_* counters are over the last
+    100 connections: ct_src_ltm (from this source) approximates the runtime
+    per-source count, ct_src_dport_ltm / ct_src_ltm its same-port share."""
+    svc = df["service"]
+    count = df["ct_src_ltm"].clip(lower=1)
+    same = (df["ct_src_dport_ltm"] / count).clip(0, 1)
+    out = pd.DataFrame({
+        "log_bytes": np.log1p(df["sbytes"].clip(upper=10_000_000)),
+        "log_count": np.log1p(df["ct_src_ltm"]),
+        "diff_srv_rate": 1.0 - same,
+        "same_srv_rate": same,
+        "proto_tcp": (df["proto"] == "tcp").astype(float),
+        "proto_udp": (df["proto"] == "udp").astype(float),
+        "proto_icmp": (df["proto"] == "icmp").astype(float),
+        "svc_http": svc.isin(["http", "ssl"]).astype(float),
+        "svc_ssh": (svc == "ssh").astype(float),
+        "svc_smb": 0.0,  # no SMB service label in UNSW-NB15; SMB is covered by the signature rule
+        "svc_dns": (svc == "dns").astype(float),
+    })
+    return out[FEATURES].to_numpy(dtype=np.float64)
+
+
+# UI label for each model class (what the analyst sees as attack_type).
+LABELS = {
+    "nsl": {"dos": "DDoS", "probe": "PortScan", "r2l": "Intrusion", "u2r": "PrivilegeEscalation"},
+    "unsw": {"generic": "GenericAttack", "exploits": "Exploit", "fuzzers": "Fuzzing", "dos": "DDoS",
+             "reconnaissance": "PortScan", "analysis": "Analysis", "backdoor": "Backdoor",
+             "shellcode": "Shellcode", "worms": "Worm"},
+}
+DATASETS = {
+    "nsl": (load, featurize, CLASSES,
+            "NSL-KDD (train: KDDTrain+, test: KDDTest+, which includes attack types unseen in training)"),
+    "unsw": (load_unsw, featurize_unsw, UNSW_CLASSES,
+             "UNSW-NB15 (official training-set / testing-set partition, 9 attack families)"),
+}
+
+
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--dataset", choices=sorted(DATASETS), default="nsl")
     ap.add_argument("--train", required=True)
     ap.add_argument("--test", required=True)
     ap.add_argument("--out", default=str(Path(__file__).resolve().parent))
     args = ap.parse_args()
 
-    train, test = load(args.train), load(args.test)
-    Xtr, Xte = featurize(train), featurize(test)
+    load_fn, featurize_fn, CLASSES, description = DATASETS[args.dataset]
+    train, test = load_fn(args.train), load_fn(args.test)
+    Xtr, Xte = featurize_fn(train), featurize_fn(test)
     ytr = train["category"].map(CLASSES.index).to_numpy()
     yte = test["category"].map(CLASSES.index).to_numpy()
 
@@ -135,7 +190,7 @@ def main():
 
     report = classification_report(yte, pred, target_names=CLASSES, output_dict=True, zero_division=0)
     metrics = {
-        "dataset": "NSL-KDD (train: KDDTrain+, test: KDDTest+, which includes attack types unseen in training)",
+        "dataset": description,
         "n_train": int(len(ytr)),
         "n_test": int(len(yte)),
         "features": FEATURES,
@@ -160,6 +215,8 @@ def main():
     model = {
         "features": FEATURES,
         "classes": CLASSES,
+        "labels": LABELS[args.dataset],
+        "dataset": args.dataset,
         "mean": mean.tolist(),
         "std": std.tolist(),
         "coef": lr.coef_.tolist(),
