@@ -19,7 +19,7 @@ A Java service parses packet telemetry and streams it to a FastAPI hub. A detect
 | Detector | Real model. Multinomial logistic regression trained on NSL-KDD and evaluated on the held-out `KDDTest+` set (numbers below). Ransomware is a **signature rule** (SMB bulk transfer from an external IP), because NSL-KDD has no ransomware class. Each detection is tagged with its closest MITRE ATT&CK technique: a port scan maps to T1046 Network Service Discovery, the SMB rule to T1486 Data Encrypted for Impact. |
 | Planner | Real LLM (Groq `openai/gpt-oss-120b` or OpenAI) when a key is set. Without one, a scripted keyword planner answers. The sidebar always shows which one answered, and a failed LLM call never falls back silently. |
 | Memory | Qdrant Cloud, or an on-disk local store (`backend/.qdrant`) that survives restarts. Every opened and contained case is saved as a full workspace snapshot; asking the agent to *continue* or *resume* reopens the latest one. Embeddings come from Gemini, or from a deterministic hash when no key is set. |
-| Hosted demo | **Browser sandbox.** GitHub Pages has no backend, so the demo replays scripted telemetry and agent replies in the browser and labels itself that way. Run locally (below) for the real pipeline. |
+| Hosted demo | **Real backend.** The Pages site connects to the FastAPI backend on Render, and the agent answers with `openai/gpt-oss-120b` on Groq. Telemetry there comes from the built-in simulator, because the Java ingester isn't deployed. If the backend is unreachable, the page falls back to a browser sandbox and the sidebar says so. The free Render instance sleeps when idle, so the first load can take up to a minute. |
 
 ## Numbers
 
