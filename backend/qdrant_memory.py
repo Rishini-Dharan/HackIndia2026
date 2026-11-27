@@ -52,8 +52,16 @@ if QDRANT_URL and QDRANT_API_KEY:
         print(f"[QDRANT] Remote connection failed: {e}. Falling back to local in-memory instance.")
 
 if qdrant_client is None:
-    print("[QDRANT] Initializing local in-memory Qdrant instance.")
-    qdrant_client = QdrantClient(":memory:")
+    # On-disk local store so saved investigations survive a backend restart.
+    # QDRANT_PATH=":memory:" keeps everything in RAM (used by the tests).
+    local_path = os.getenv("QDRANT_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".qdrant"))
+    print(f"[QDRANT] Using local Qdrant store at {local_path}")
+    qdrant_client = QdrantClient(":memory:") if local_path == ":memory:" else QdrantClient(path=local_path)
+
+import atexit
+
+# Close explicitly; the client's __del__ runs too late at interpreter shutdown and errors.
+atexit.register(qdrant_client.close)
 
 # Initialize collection if not exists
 try:
@@ -147,8 +155,8 @@ def add_memory(text: str, category: str, metadata: dict = None) -> bool:
             **(metadata or {})
         }
         
-        import random
-        point_id = random.randint(1, 10000000)
+        import uuid
+        point_id = str(uuid.uuid4())  # random ints collided and silently overwrote memories
         
         qdrant_client.upsert(
             collection_name=COLLECTION_NAME,
@@ -220,10 +228,12 @@ def add_investigation(
     actions_taken: list[str] = None,
     threat_confidence: float = 98.0,
     next_suggested_action: str = "",
-    resolved: bool = False
+    resolved: bool = False,
+    workspace: dict | None = None,
 ) -> bool:
-    """Helper to store a structured investigation profile in vector memory."""
-    from datetime import datetime
+    """Helper to store a structured investigation profile in vector memory.
+    `workspace` is a full snapshot so the case can be reopened exactly as it was."""
+    from datetime import datetime, timezone
     fact_text = (
         f"Investigation {case_id} [Resolved: {resolved}]. status '{status}'. Hypothesis: {hypothesis}. "
         f"Evidence: {', '.join(evidence)}. Chosen Strategy: {strategy}. Operator Notes: {notes}. "
@@ -242,7 +252,8 @@ def add_investigation(
         "threat_confidence": threat_confidence,
         "next_suggested_action": next_suggested_action,
         "resolved": resolved,
-        "timestamp": datetime.now().isoformat()
+        "workspace": workspace,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     return add_memory(fact_text, category="investigations", metadata=metadata)
 
@@ -252,3 +263,21 @@ def get_active_investigations() -> list[dict]:
     return search_memory("active cases", limit=10, category="investigations")
 
 
+
+
+def get_latest_investigation() -> dict | None:
+    """Most recently saved investigation, by timestamp (not by vector similarity)."""
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    try:
+        points, _ = qdrant_client.scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=Filter(must=[FieldCondition(key="category", match=MatchValue(value="investigations"))]),
+            limit=1000,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception as e:
+        print(f"[QDRANT] Error listing investigations: {e}")
+        return None
+    cases = [p.payload for p in points]
+    return max(cases, key=lambda c: c.get("timestamp", "")) if cases else None

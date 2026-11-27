@@ -3,6 +3,7 @@ Q-Guardian OS — WebSocket Connection Manager & Message Handler
 """
 
 import uuid
+from datetime import datetime, timezone
 import json
 from fastapi import WebSocket
 from llm_orchestrator import plan_investigation
@@ -39,6 +40,7 @@ def _evidence_from(event: dict) -> list[str]:
         f"{event['bytes']:,} bytes from {event['src_ip']} to {event['dst_ip']}:{event['port']} ({event['protocol']}).",
         f"Classified as {event['attack_type']} with score {event['score']} by `{event['detector']}`.",
         f"Severity {event['severity']}; first seen {event['ts']}.",
+        *([f"MITRE ATT&CK {m['id']} {m['name']} ({m['tactic']})."] if (m := event.get("mitre")) else []),
     ]
 
 
@@ -53,6 +55,7 @@ def reset_current_workspace(event: dict | None = None):
         return
     ATTACKER_IP, VICTIM_IP = event["src_ip"], event["dst_ip"]
     CURRENT_WORKSPACE = retarget(CURRENT_WORKSPACE)
+    CURRENT_WORKSPACE["id"] = f"INV-{datetime.now(timezone.utc):%m%d-%H%M%S}"
     LAST_EVIDENCE = _evidence_from(event)
     CURRENT_WORKSPACE["evidence"] = LAST_EVIDENCE
     CURRENT_WORKSPACE["confidence"] = round(event["score"] * 100, 1)
@@ -119,6 +122,47 @@ reset_current_workspace()
 
 
 
+def save_active_investigation():
+    """Snapshot the open workspace to Qdrant so it can be resumed after a restart."""
+    qdrant_memory.add_investigation(
+        case_id=CURRENT_WORKSPACE["id"],
+        status="active",
+        evidence=LAST_EVIDENCE,
+        hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""),
+        strategy="pending",
+        notes="Opened automatically on a critical detection.",
+        threat_confidence=CURRENT_WORKSPACE.get("confidence", 0.0),
+        widgets_open=[w["component"] for w in CURRENT_WORKSPACE.get("layout", [])],
+        workspace=CURRENT_WORKSPACE,
+    )
+
+
+async def restore_latest_investigation(manager, websocket) -> bool:
+    """Reopen the most recently saved case exactly as it was stored. Returns False
+    when nothing restorable is saved, so the planner can answer instead."""
+    global CURRENT_WORKSPACE, LAST_EVIDENCE, ATTACKER_IP, VICTIM_IP
+    case = qdrant_memory.get_latest_investigation()
+    if not case or not case.get("workspace"):
+        return False
+    CURRENT_WORKSPACE = case["workspace"]
+    LAST_EVIDENCE = case.get("evidence") or LAST_EVIDENCE
+    containment = next((w for w in CURRENT_WORKSPACE.get("layout", []) if w.get("component") == "MitigationAction"), None)
+    ips = (containment or {}).get("props", {}).get("threatIps") or []
+    if ips:
+        ATTACKER_IP = ips[0]
+    await manager.send_personal(websocket, {
+        "type": "chat",
+        "role": "agent",
+        "content": (
+            f"Restored **{case['case_id']}** from Qdrant memory (saved {case.get('timestamp', 'earlier')[:19].replace('T', ' ')} UTC, "
+            f"status **{case.get('status')}**).\n\n**Hypothesis:** {case.get('hypothesis', '')}\n\n"
+            f"**Last step:** {case.get('notes', '')}"
+        ),
+    })
+    await manager.send_personal(websocket, {"type": "workspace_mount", "workspace": CURRENT_WORKSPACE})
+    return True
+
+
 class ConnectionManager:
     """Manages active WebSocket connections and broadcasts."""
 
@@ -175,6 +219,11 @@ async def handle_ws_message(
 
         # ── WOW Moment: Dynamic Workspace Morphing / Evolving ─────────
         user_lower = user_text.lower()
+
+        # ── Resume the last saved investigation from Qdrant ──────────
+        if any(kw in user_lower for kw in ["continue", "resume", "yesterday", "last investigation", "last case"]):
+            if await restore_latest_investigation(manager, websocket):
+                return
         if any(kw in user_lower for kw in ["compare", "comparison"]):
             # Add comparison panel to CURRENT_WORKSPACE layout
             has_comparison = any(w["id"] == "comparison-widget" for w in CURRENT_WORKSPACE.get("layout", []))
@@ -383,13 +432,16 @@ async def handle_ws_message(
 
             # Save the completed ransomware investigation profile to Qdrant vector store!
             qdrant_memory.add_investigation(
-                case_id="INV-412",
+                case_id=CURRENT_WORKSPACE.get("id", "INV-412"),
                 status="neutralized",
                 evidence=LAST_EVIDENCE,
                 hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""),
                 strategy=strategy,
-                notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}"
+                notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}",
+                threat_confidence=CURRENT_WORKSPACE.get("confidence", 0.0),
+                resolved=True,
             )
+            case_id = CURRENT_WORKSPACE.get("id", "INV-412")
 
             # ── Reactive: Block IPs in the simulator & stop attack mode ──
             import anomaly_simulator
@@ -475,6 +527,14 @@ async def handle_ws_message(
                 ]
             }
             CURRENT_WORKSPACE = retarget(CURRENT_WORKSPACE)
+            CURRENT_WORKSPACE["id"] = case_id
+            # Snapshot the contained state so "continue" reopens it as it is now.
+            qdrant_memory.add_investigation(
+                case_id=case_id, status="neutralized", evidence=LAST_EVIDENCE,
+                hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""), strategy=strategy,
+                notes=f"Isolated {', '.join(ips)} ({strategy}).", resolved=True,
+                workspace=CURRENT_WORKSPACE,
+            )
 
             await manager.broadcast({
                 "type": "workspace_mount",

@@ -120,3 +120,31 @@ def test_empty_batch_does_not_pause_simulator_and_epoch_ts_is_converted():
                 if m["type"] == "telemetry" and m["data"]["src_ip"] == "10.0.1.9":
                     break
     assert m["data"]["ts"].startswith("2024-07-03T")
+
+
+def test_continue_restores_latest_saved_case():
+    import qdrant_memory
+    import ws_handler
+
+    qdrant_memory.clear_memories()
+    sim.PROACTIVE_TRIGGERED = False
+    sim.BLOCKED_IPS.clear()
+    with TestClient(main.app) as client:
+        client.post("/ingest", json=_scan_batch("198.51.100.44"))
+        saved_id = ws_handler.CURRENT_WORKSPACE["id"]
+        ws_handler.reset_current_workspace()  # simulate a restart losing in-process state
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.receive_json(); ws.receive_json()
+            ws.send_json({"type": "chat", "content": "continue yesterday's investigation"})
+            msgs = []
+            for _ in range(30):
+                msgs.append(ws.receive_json())
+                if msgs[-1]["type"] == "workspace_mount":
+                    break
+    chat = next(m for m in msgs if m["type"] == "chat" and "Restored" in m["content"])
+    assert saved_id in chat["content"]
+    workspace = msgs[-1]["workspace"]
+    assert workspace["id"] == saved_id
+    assert any("T1046" in e for e in workspace["evidence"])
+    assert "198.51.100.44" in workspace["hypothesis"]
+    ws_handler.reset_current_workspace()

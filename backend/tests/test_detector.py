@@ -56,3 +56,13 @@ def test_smb_bulk_transfer_rule_needs_external_source():
     assert external["detector"] == "rule:smb-bulk-transfer"
     internal = d.classify(ev(src="192.168.1.20", port=445, nbytes=60000))
     assert internal["attack_type"] != "Ransomware"
+
+
+def test_detections_carry_mitre_technique():
+    d = MLAnomalyDetector()
+    for i in range(1, 40):
+        r = d.classify(ev(src="198.51.100.9", port=i * 13, nbytes=0))
+    assert r["mitre"] == {"id": "T1046", "name": "Network Service Discovery", "tactic": "Discovery"}
+    smb = d.classify(ev(src="45.33.12.99", port=445, nbytes=60000))
+    assert smb["mitre"]["id"] == "T1486"
+    assert d.classify(ev())["mitre"] is None
