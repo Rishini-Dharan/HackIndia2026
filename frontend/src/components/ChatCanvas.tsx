@@ -155,6 +155,8 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 
   return (
     <div className="space-y-3">
+      {/* Widget-only replies (a tool call with no text) have no bubble */}
+      {message.content.trim() !== '' && (
       <div className={`flex ${isUser ? 'justify-end msg-user' : 'justify-start msg-agent'}`}>
         <div
           className={`
@@ -168,6 +170,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <FormattedContent content={message.content} />
         </div>
       </div>
+      )}
 
       {/* Render inline widgets attached to this message (only if not in split workspace) */}
       {!activeWorkspace && message.widgets && message.widgets.length > 0 && (

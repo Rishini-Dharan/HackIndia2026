@@ -503,16 +503,30 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
                   const msgs = [...state.messages]
                   const lastAgentIdx = msgs.findLastIndex((m: ChatMessage) => m.role === 'agent')
+                  const lastUserIdx = msgs.findLastIndex((m: ChatMessage) => m.role === 'user')
 
-                  if (lastAgentIdx >= 0) {
+                  // Attach to the agent's reply to the latest question. If the planner sent
+                  // only a tool call (no text), there is no such reply yet, so start one;
+                  // otherwise the widget would land on an older message above the question.
+                  if (lastAgentIdx > lastUserIdx) {
                     const lastMsg = { ...msgs[lastAgentIdx] }
                     lastMsg.widgets = [...(lastMsg.widgets || []), widget]
                     msgs[lastAgentIdx] = lastMsg
+                  } else {
+                    msgs.push({
+                      id: generateId(),
+                      type: 'chat',
+                      role: 'agent',
+                      content: '',
+                      widgets: [widget],
+                      timestamp: Date.now(),
+                    })
                   }
 
                   set({
                     messages: msgs,
                     mountedWidgets: [...state.mountedWidgets, widget],
+                    isTyping: false,
                   })
                 } else if (data.action === 'unmount') {
                   set({
