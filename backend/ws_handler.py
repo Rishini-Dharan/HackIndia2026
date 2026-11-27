@@ -11,7 +11,32 @@ import qdrant_memory
 # Global Active Workspace state tracking for dynamic modifications
 CURRENT_WORKSPACE = {}
 
-def reset_current_workspace():
+LAST_EVIDENCE: list[str] = [
+    "No live detection yet: workspace opened from the demo template.",
+]
+
+
+def _evidence_from(event: dict) -> list[str]:
+    return [
+        f"{event['bytes']:,} bytes from {event['src_ip']} to {event['dst_ip']}:{event['port']} ({event['protocol']}).",
+        f"Classified as {event['attack_type']} with score {event['score']} by `{event['detector']}`.",
+        f"Severity {event['severity']}; first seen {event['ts']}.",
+    ]
+
+
+def reset_current_workspace(event: dict | None = None):
+    """Build the investigation workspace. With a detection event, the evidence,
+    confidence and node addresses come from that event instead of the template."""
+    global CURRENT_WORKSPACE, LAST_EVIDENCE
+    _build_template_workspace()
+    if event:
+        LAST_EVIDENCE = _evidence_from(event)
+        CURRENT_WORKSPACE["evidence"] = LAST_EVIDENCE
+        CURRENT_WORKSPACE["confidence"] = round(event["score"] * 100, 1)
+        CURRENT_WORKSPACE["threatType"] = event["attack_type"]
+
+
+def _build_template_workspace():
     global CURRENT_WORKSPACE
     CURRENT_WORKSPACE = {
         "id": "INV-412",
@@ -22,7 +47,7 @@ def reset_current_workspace():
         "evidence": [
             "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
             "Repeated connections from high-risk external subnet.",
-            "Java high-speed packet ingestion classified: threat score = 0.985."
+            "Waiting for a live detection to replace this template evidence."
         ],
         "layout": [
             {
@@ -30,7 +55,7 @@ def reset_current_workspace():
                 "id": "traffic-ransomware",
                 "props": {
                     "title": "Active Traffic Spike (Port 445)",
-                    "description": "Spike detected in Java ingestion packet logs"
+                    "description": "SMB traffic from the flagged source"
                 }
             },
             {
@@ -311,6 +336,9 @@ async def handle_ws_message(
                 )
             await manager.send_personal(websocket, response)
 
+        import llm_orchestrator
+        await manager.send_personal(websocket, {"type": "agent_mode", **llm_orchestrator.LAST_MODE})
+
     elif msg_type == "action":
         payload = data.get("payload", {})
         action = payload.get("action", "")
@@ -331,11 +359,7 @@ async def handle_ws_message(
             qdrant_memory.add_investigation(
                 case_id="INV-412",
                 status="neutralized",
-                evidence=[
-                    "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
-                    "Repeated connections from high-risk external subnet.",
-                    "Java high-speed packet ingestion classified: threat score = 0.985."
-                ],
+                evidence=LAST_EVIDENCE,
                 hypothesis="Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.",
                 strategy=strategy,
                 notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}"

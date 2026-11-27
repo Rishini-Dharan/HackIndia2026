@@ -1,0 +1,307 @@
+{
+  "summary": {
+    "mode": "scripted",
+    "provider": "mock",
+    "model": "scripted",
+    "cases": 20,
+    "passed": 16,
+    "accuracy": 0.8,
+    "median_latency_s": 0.0
+  },
+  "cases": [
+    {
+      "prompt": "hi there",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "what can you do?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "who built you and how do you work?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "thanks, that's all for now",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "show me live network traffic",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "is there a bandwidth spike right now? plot the traffic",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "map the blast radius of the attack",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "which hosts are talking to the attacker? show the topology",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "open the incident triage board",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "list the active incidents by severity",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "block 45.33.12.99 immediately",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "isolate the compromised host",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "rate-limit the suspicious IPs for 24 hours",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "show the current firewall rules as a table",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 1.16,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "give me CPU and memory load metrics for the servers",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "write an incident report for INV-412",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "show live traffic and the threat topology side by side",
+      "expect": [
+        "LiveTrafficChart",
+        "ThreatTopology"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "triage the incidents and prepare containment for the worst one",
+      "expect": [
+        "IncidentTriageBoard",
+        "MitigationAction"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "what is SMB and why is port 445 risky?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "explain the difference between a DDoS and a port scan",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    }
+  ]
+}

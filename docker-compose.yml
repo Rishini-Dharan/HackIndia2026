@@ -7,8 +7,12 @@ services:
       context: ./telemetry-ingestion
       dockerfile: Dockerfile
     container_name: qgos-ingestion
-    restart: "no"
-    command: ["java", "TelemetryIngestion", "--simulate", "2000"]
+    # Streams parsed telemetry to the backend; add "--attack" to inject an SMB bulk-transfer source.
+    command: ["java", "TelemetryIngestion", "--emit", "http://backend:8000/ingest", "--rate", "6"]
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
     networks:
       - qguardian-net
 
@@ -22,7 +26,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_PROVIDER=${LLM_PROVIDER:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - GROQ_MODEL=${GROQ_MODEL:-llama-3.3-70b-versatile}
       - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1/chat/completions}

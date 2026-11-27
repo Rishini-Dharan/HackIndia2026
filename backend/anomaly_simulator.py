@@ -183,63 +183,55 @@ def unblock_all():
     print("[SIMULATOR] All IPs unblocked")
 
 
-async def anomaly_simulator(manager):
-    """
-    Background task that pushes telemetry events to all connected
-    WebSocket clients every 500ms.
-    """
-    global PROACTIVE_TRIGGERED
-    print("[SIMULATOR] Anomaly simulator started (500ms interval)")
+LAST_INGEST_AT: float = 0.0  # time of the last batch received from the Java ingester
+INGEST_TAKEOVER_SECONDS = 3.0
 
+
+async def process_event(manager, raw_event: dict) -> dict:
+    """Classify one telemetry event, broadcast it, and mount the investigation
+    workspace the first time a critical threat is seen. Used by both the built-in
+    simulator and the POST /ingest endpoint fed by the Java ingestion service."""
+    global PROACTIVE_TRIGGERED
+    if raw_event["src_ip"] in BLOCKED_IPS:
+        return {"blocked": True, **raw_event}
+    event = detector.classify(raw_event)
+    await manager.broadcast({"type": "telemetry", "data": event})
+
+    if event["is_threat"] and event["severity"] == "critical" and not PROACTIVE_TRIGGERED:
+        import ws_handler
+        ws_handler.reset_current_workspace(event)
+        print(f"[DETECT] {event['attack_type']} from {event['src_ip']} score={event['score']} via {event['detector']}")
+        await manager.broadcast({
+            "type": "chat",
+            "role": "agent",
+            "content": (
+                f"⚠️ **CRITICAL THREAT DETECTED: {event['attack_type']}**\n\n"
+                f"Source `{event['src_ip']}` → `{event['dst_ip']}:{event['port']}`, "
+                f"score **{event['score']}** (`{event['detector']}`). I have opened investigation "
+                f"workspace **{ws_handler.CURRENT_WORKSPACE['id']}** with topology, traffic and containment panels."
+            ),
+        })
+        await manager.broadcast({"type": "workspace_mount", "workspace": ws_handler.CURRENT_WORKSPACE})
+        PROACTIVE_TRIGGERED = True
+    return event
+
+
+async def anomaly_simulator(manager):
+    """Background task that generates telemetry every 500 ms when no real
+    ingestion source is connected."""
+    print("[SIMULATOR] Anomaly simulator started (500ms interval)")
     while True:
         try:
-            if manager.active_connections:
+            ingest_live = time.time() - LAST_INGEST_AT < INGEST_TAKEOVER_SECONDS
+            if manager.active_connections and not ingest_live:
                 if IS_ATTACK_ACTIVE:
-                    # ── Attack mode: mix attack events with baseline ──────────
-                    # Generate 1 attack event + 1-2 baseline events per tick
-                    attack_event = detector.classify(_generate_attack_event())
-                    await manager.broadcast({
-                        "type": "telemetry",
-                        "data": attack_event,
-                    })
-
-                    # Also send some baseline traffic (attacks don't stop normal traffic)
-                    baseline_count = random.randint(1, 2)
-                    for _ in range(baseline_count):
-                        await manager.broadcast({
-                            "type": "telemetry",
-                            "data": detector.classify(_generate_baseline_event()),
-                        })
-
-                    # Proactive workspace mount on first detection
-                    if not PROACTIVE_TRIGGERED and attack_event["is_threat"]:
-                        print("[SIMULATOR] Proactive threat detected! Mounting Investigation Workspace...")
-                        import ws_handler
-                        ws_handler.reset_current_workspace()
-
-                        await manager.broadcast({
-                            "type": "chat",
-                            "role": "agent",
-                            "content": "⚠️ **CRITICAL THREAT INTRUSION DETECTED**\n\nHigh-volume SMB anomalies detected. I have proactively instantiated investigation workspace **INV-412** and mounted the Threat Topology, Traffic Monitor, and Containment panels. Recommended action: Isolate host immediately.",
-                        })
-
-                        await manager.broadcast({
-                            "type": "workspace_mount",
-                            "workspace": ws_handler.CURRENT_WORKSPACE
-                        })
-                        PROACTIVE_TRIGGERED = True
-
+                    await process_event(manager, _generate_attack_event())
+                    for _ in range(random.randint(1, 2)):
+                        await process_event(manager, _generate_baseline_event())
                 else:
-                    # ── Normal mode: realistic baseline traffic ───────────────
-                    event_count = random.randint(2, 4)
-                    for _ in range(event_count):
-                        await manager.broadcast({
-                            "type": "telemetry",
-                            "data": detector.classify(_generate_baseline_event()),
-                        })
-
+                    for _ in range(random.randint(2, 4)):
+                        await process_event(manager, _generate_baseline_event())
             await asyncio.sleep(0.5)
-
         except asyncio.CancelledError:
             print("[SIMULATOR] Anomaly simulator stopped.")
             raise

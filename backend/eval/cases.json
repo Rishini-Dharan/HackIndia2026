@@ -1,0 +1,22 @@
+[
+  {"prompt": "hi there", "expect": []},
+  {"prompt": "what can you do?", "expect": []},
+  {"prompt": "who built you and how do you work?", "expect": []},
+  {"prompt": "thanks, that's all for now", "expect": []},
+  {"prompt": "show me live network traffic", "expect": ["LiveTrafficChart"]},
+  {"prompt": "is there a bandwidth spike right now? plot the traffic", "expect": ["LiveTrafficChart"]},
+  {"prompt": "map the blast radius of the attack", "expect": ["ThreatTopology"]},
+  {"prompt": "which hosts are talking to the attacker? show the topology", "expect": ["ThreatTopology"]},
+  {"prompt": "open the incident triage board", "expect": ["IncidentTriageBoard"]},
+  {"prompt": "list the active incidents by severity", "expect": ["IncidentTriageBoard"]},
+  {"prompt": "block 45.33.12.99 immediately", "expect": ["MitigationAction"]},
+  {"prompt": "isolate the compromised host", "expect": ["MitigationAction"]},
+  {"prompt": "rate-limit the suspicious IPs for 24 hours", "expect": ["MitigationAction"]},
+  {"prompt": "show the current firewall rules as a table", "expect": ["DynamicDashboard"]},
+  {"prompt": "give me CPU and memory load metrics for the servers", "expect": ["DynamicDashboard"]},
+  {"prompt": "write an incident report for INV-412", "expect": ["DynamicDashboard"]},
+  {"prompt": "show live traffic and the threat topology side by side", "expect": ["LiveTrafficChart", "ThreatTopology"]},
+  {"prompt": "triage the incidents and prepare containment for the worst one", "expect": ["IncidentTriageBoard", "MitigationAction"]},
+  {"prompt": "what is SMB and why is port 445 risky?", "expect": []},
+  {"prompt": "explain the difference between a DDoS and a port scan", "expect": []}
+]

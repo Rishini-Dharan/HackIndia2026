@@ -1,0 +1,113 @@
+{
+  "dataset": "NSL-KDD (train: KDDTrain+, test: KDDTest+, which includes attack types unseen in training)",
+  "n_train": 125973,
+  "n_test": 22544,
+  "features": [
+    "log_bytes",
+    "log_count",
+    "diff_srv_rate",
+    "same_srv_rate",
+    "proto_tcp",
+    "proto_udp",
+    "proto_icmp",
+    "svc_http",
+    "svc_ssh",
+    "svc_smb",
+    "svc_dns"
+  ],
+  "model": "multinomial logistic regression, balanced class weights",
+  "binary_attack_vs_normal": {
+    "precision": 0.8571,
+    "recall": 0.9009,
+    "f1": 0.8784,
+    "roc_auc": 0.9058
+  },
+  "operating_point_p_attack_ge_0.95": {
+    "precision": 0.9669,
+    "recall": 0.6218
+  },
+  "multiclass_macro_f1": 0.5216,
+  "multiclass_accuracy": 0.7075,
+  "per_class": {
+    "normal": {
+      "precision": 0.8595,
+      "recall": 0.8015,
+      "f1-score": 0.8295,
+      "support": 9711.0
+    },
+    "dos": {
+      "precision": 0.9251,
+      "recall": 0.7369,
+      "f1-score": 0.8204,
+      "support": 7458.0
+    },
+    "probe": {
+      "precision": 0.661,
+      "recall": 0.9566,
+      "f1-score": 0.7818,
+      "support": 2421.0
+    },
+    "r2l": {
+      "precision": 0.2209,
+      "recall": 0.1173,
+      "f1-score": 0.1532,
+      "support": 2754.0
+    },
+    "u2r": {
+      "precision": 0.0124,
+      "recall": 0.16,
+      "f1-score": 0.023,
+      "support": 200.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "normal",
+      "dos",
+      "probe",
+      "r2l",
+      "u2r"
+    ],
+    "rows_true_cols_pred": [
+      [
+        7783,
+        443,
+        361,
+        812,
+        312
+      ],
+      [
+        940,
+        5496,
+        705,
+        273,
+        44
+      ],
+      [
+        8,
+        1,
+        2316,
+        0,
+        96
+      ],
+      [
+        324,
+        1,
+        8,
+        323,
+        2098
+      ],
+      [
+        0,
+        0,
+        114,
+        54,
+        32
+      ]
+    ]
+  },
+  "reference_random_forest": {
+    "multiclass_macro_f1": 0.5898,
+    "multiclass_accuracy": 0.8136
+  }
+}

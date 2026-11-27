@@ -1,169 +1,155 @@
 """
-Q-Guardian OS — Stateful ML Telemetry Classifier Engine
+Q-Guardian OS — streaming threat detector.
 
-Extracts features from telemetry streams statefully and runs a
-multi-class Logistic Regression model (implemented via NumPy)
-to evaluate anomaly scores, severities, and target attack types.
+Two detectors run on every telemetry event:
+
+1. A multinomial logistic-regression model trained on NSL-KDD (see ml/train.py,
+   held-out metrics in ml/metrics.json). Weights are loaded from ml/model.json and
+   evaluated with NumPy, so the backend does not need scikit-learn at runtime.
+2. A signature rule for SMB bulk transfer from an external address (ransomware-style
+   lateral movement). NSL-KDD has no ransomware class, so this is a rule, and events
+   it flags are labelled `detector: "rule:smb-bulk-transfer"`.
+
+Features are computed per source IP over a sliding window, which approximates the
+NSL-KDD traffic features the model was trained on (see ml/train.py).
 """
 
-import time
+import json
 import math
+import time
 from collections import defaultdict, deque
+from datetime import datetime, timezone
+from ipaddress import ip_address
+from pathlib import Path
+
 import numpy as np
 
+MODEL_PATH = Path(__file__).resolve().parent / "ml" / "model.json"
+
+# Model category -> attack label shown in the UI
+CATEGORY_LABEL = {"dos": "DDoS", "probe": "PortScan", "r2l": "Intrusion", "u2r": "PrivilegeEscalation"}
+
+HTTP_PORTS = {80, 8080, 8000, 443, 8443}
+SMB_PORTS = {139, 445}
+DNS_PORTS = {53}
+SSH_PORTS = {22}
+
+# P(attack) needed to flag an event. At 0.80 the model flagged ~12% of the simulator's
+# benign database/ICMP traffic; at 0.95 it flagged none while scans and floods still
+# score > 0.97. Held-out precision/recall at this operating point is in ml/metrics.json.
+THREAT_THRESHOLD = 0.95
+SMB_BULK_BYTES = 20_000          # rule: SMB transfer larger than this from an external IP
+RULE_SCORE = 0.97                # confidence assigned to signature hits (critical severity)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _is_external(ip: str) -> bool:
+    try:
+        return ip_address(ip).is_global
+    except ValueError:
+        return False
+
+
 class MLAnomalyDetector:
-    """
-    Stateful Machine Learning Packet Anomaly Detector.
-    Calculates sliding window flow statistics and runs weight matrix
-    dot products to predict attack categories and anomaly scores.
-    """
-    def __init__(self, window_size: int = 150, time_window_seconds: float = 8.0):
+    def __init__(self, window_size: int = 300, time_window_seconds: float = 2.0, model_path: Path = MODEL_PATH):
         self.window_size = window_size
         self.time_window_seconds = time_window_seconds
-        
-        # Stateful flow tracking: sliding window of packets
-        self.events_window = deque()
-        self.ip_traffic = defaultdict(deque)
+        self.events_window: deque = deque()
+        self.by_src: dict[str, deque] = defaultdict(deque)
 
-        # Pre-trained Logistic Regression weights for security classification
-        # Feature order: [normalized_bytes, pps, unique_ports, is_smb, is_http, is_ssh]
-        self.weights = {
-            "Ransomware": np.array([4.0, 0.0, -1.0, 6.0, -2.0, -2.0]),  # SMB, High Byte Count
-            "DDoS":       np.array([-2.0, 7.5, -0.5, -2.0, 0.0, -1.0]),   # High Packet-Per-Second (pps)
-            "PortScan":   np.array([-1.0, 1.0, 8.5, -1.0, -1.0, -1.0]),   # Visited multiple unique ports
-            "SQLi":       np.array([3.0, 0.0, -1.0, -2.0, 5.0, -2.0]),    # Large HTTP payload anomaly
-            "BruteForce": np.array([0.0, 5.0, -0.5, -2.0, -2.0, 6.0]),    # High frequency hits on SSH port 22
-        }
-        self.biases = {
-            "Ransomware": -2.8,
-            "DDoS":       -3.2,
-            "PortScan":   -2.2,
-            "SQLi":       -2.5,
-            "BruteForce": -2.6,
-        }
+        model = json.loads(Path(model_path).read_text())
+        self.features: list[str] = model["features"]
+        self.classes: list[str] = model["classes"]
+        self.mean = np.array(model["mean"])
+        self.std = np.array(model["std"])
+        self.coef = np.array(model["coef"])
+        self.intercept = np.array(model["intercept"])
 
-    def _update_window(self, event: dict):
-        """Update sliding window state with the latest network telemetry event."""
-        current_time = time.time()
-        # Attach internal timestamp for sliding window eviction
-        event_copy = dict(event)
-        event_copy["_internal_ts"] = current_time
-        
-        self.events_window.append(event_copy)
-        self.ip_traffic[event["src_ip"]].append(current_time)
-        
-        # Evict events exceeding size limit
-        while len(self.events_window) > self.window_size:
-            ev = self.events_window.popleft()
-            self.ip_traffic[ev["src_ip"]].popleft()
-            
-        # Evict events older than time window limit
-        while self.events_window and (current_time - self.events_window[0]["_internal_ts"] > self.time_window_seconds):
-            ev = self.events_window.popleft()
-            self.ip_traffic[ev["src_ip"]].popleft()
+    # ── window bookkeeping ──────────────────────────────────────
+    def _evict(self, now: float):
+        while self.events_window and (
+            len(self.events_window) > self.window_size
+            or now - self.events_window[0][0] > self.time_window_seconds
+        ):
+            _, src, _ = self.events_window.popleft()
+            q = self.by_src[src]
+            q.popleft()
+            if not q:
+                del self.by_src[src]
+
+    def _update(self, src: str, port: int, now: float):
+        self.events_window.append((now, src, port))
+        self.by_src[src].append(port)
+        self._evict(now)
+
+    # ── features & inference ────────────────────────────────────
+    def features_for(self, event: dict) -> np.ndarray:
+        src, port = event["src_ip"], int(event["port"])
+        ports = self.by_src.get(src, deque([port]))
+        count = len(ports)
+        same = sum(1 for p in ports if p == port) / count
+        proto = str(event.get("protocol", "")).upper()
+        is_udp = proto in {"UDP", "DNS"}
+        is_icmp = proto == "ICMP"
+        values = {
+            "log_bytes": math.log1p(max(0, int(event["bytes"]))),
+            "log_count": math.log1p(count),
+            "diff_srv_rate": 1.0 - same,
+            "same_srv_rate": same,
+            "proto_tcp": float(not is_udp and not is_icmp),
+            "proto_udp": float(is_udp),
+            "proto_icmp": float(is_icmp),
+            "svc_http": float(port in HTTP_PORTS),
+            "svc_ssh": float(port in SSH_PORTS),
+            "svc_smb": float(port in SMB_PORTS),
+            "svc_dns": float(port in DNS_PORTS),
+        }
+        return np.array([values[f] for f in self.features])
+
+    def predict_proba(self, x: np.ndarray) -> np.ndarray:
+        z = (x - self.mean) / self.std
+        logits = self.coef @ z + self.intercept
+        logits -= logits.max()
+        e = np.exp(logits)
+        return e / e.sum()
 
     def classify(self, event: dict) -> dict:
-        """
-        Classifies an inbound packet telemetry event.
-        Extracts features and performs NumPy-based Logistic Regression inference.
-        """
-        self._update_window(event)
-        
-        src_ip = event["src_ip"]
-        port = event["port"]
-        bytes_count = event["bytes"]
-        protocol = event["protocol"]
-        
-        # Feature 1: Normalized Bytes
-        norm_bytes = bytes_count / 65535.0
-        
-        # Feature 2: Packets Per Second (pps) for the source IP
-        current_time = time.time()
-        timestamps = self.ip_traffic[src_ip]
-        if len(timestamps) > 1:
-            duration = max(0.2, current_time - timestamps[0])
-            pps = len(timestamps) / duration
-        else:
-            pps = 1.0
-        norm_pps = min(1.0, pps / 12.0)
-        
-        # Feature 3: Number of Unique Ports visited by source IP in window
-        unique_ports = set()
-        for ev in self.events_window:
-            if ev["src_ip"] == src_ip:
-                unique_ports.add(ev["port"])
-        norm_unique_ports = min(1.0, (len(unique_ports) - 1) / 8.0)
-        
-        # Feature 4-6: Categorical Port flags
-        is_smb = 1.0 if (port == 445) else 0.0
-        is_http = 1.0 if (port in [80, 8080, 8000]) else 0.0
-        is_ssh = 1.0 if (port == 22) else 0.0
-        
-        # Construct feature vector X
-        X = np.array([norm_bytes, norm_pps, norm_unique_ports, is_smb, is_http, is_ssh])
-        
-        # Perform inference across models
-        predictions = {}
-        for cls in self.weights:
-            logit = np.dot(X, self.weights[cls]) + self.biases[cls]
-            # Sigmoid activation function
-            predictions[cls] = 1.0 / (1.0 + np.exp(-logit))
-            
-        # Gate predictions with logical preconditions to avoid false positives
-        if len(timestamps) < 8:
-            predictions["DDoS"] = 0.0
-        if len(unique_ports) < 4:
-            predictions["PortScan"] = 0.0
-        if port != 445:
-            predictions["Ransomware"] = 0.0
-        if port not in [80, 8080, 8000]:
-            predictions["SQLi"] = 0.0
-        if port != 22 or len(timestamps) < 5:
-            predictions["BruteForce"] = 0.0
-            
-        # Select target class with highest probability score
-        best_class = max(predictions, key=predictions.get)
-        best_score = predictions[best_class]
-        
-        is_threat = False
-        attack_type = None
-        
-        # If score exceeds threshold, classify as threat
-        if best_score > 0.82:
-            is_threat = True
-            attack_type = best_class
-        else:
-            # Baseline normal traffic scoring
-            best_score = min(0.19, round(0.01 + (bytes_count % 100) / 600.0, 3))
-            
-        # Assign security severities matching score thresholds
+        now = time.time()
+        src, port, nbytes = event["src_ip"], int(event["port"]), int(event["bytes"])
+        self._update(src, port, now)
+
+        proba = self.predict_proba(self.features_for(event))
+        p_attack = float(1.0 - proba[self.classes.index("normal")])
+        top = self.classes[int(proba.argmax())]
+
+        attack_type, detector, score = None, "model:nsl-kdd-lr", p_attack
+        if port in SMB_PORTS and nbytes > SMB_BULK_BYTES and _is_external(src):
+            attack_type, detector = "Ransomware", "rule:smb-bulk-transfer"
+            score = max(p_attack, RULE_SCORE)
+        elif p_attack >= THREAT_THRESHOLD and top != "normal":
+            attack_type = CATEGORY_LABEL[top]
+            if top == "r2l" and port in SSH_PORTS:
+                attack_type = "BruteForce"
+
+        is_threat = attack_type is not None
         if is_threat:
-            if best_score > 0.95:
-                severity = "critical"
-            elif best_score > 0.88:
-                severity = "high"
-            else:
-                severity = "medium"
+            severity = "critical" if score > 0.95 else "high" if score > 0.88 else "medium"
         else:
-            severity = "low"
-            if best_score > 0.12:
-                severity = "medium"
-                
-        # Return updated event metadata
+            severity = "medium" if score > 0.5 else "low"
+
         return {
-            "ts": event.get("ts") or new_utc_isoformat(),
-            "src_ip": src_ip,
+            "ts": event.get("ts") or _utc_now(),
+            "src_ip": src,
             "dst_ip": event["dst_ip"],
-            "protocol": protocol,
+            "protocol": event.get("protocol", "TCP"),
             "port": port,
-            "bytes": bytes_count,
+            "bytes": nbytes,
             "severity": severity,
             "is_threat": is_threat,
             "attack_type": attack_type,
-            "score": round(float(best_score), 3)
+            "score": round(score, 3),
+            "detector": detector,
         }
-
-def new_utc_isoformat() -> str:
-    """Helper to return current UTC ISO timestamp."""
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()

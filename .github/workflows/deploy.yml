@@ -38,6 +38,10 @@ jobs:
         run: |
           cd frontend
           npm run build
+        env:
+          # Set this repository variable to a hosted backend (wss://.../ws/chat) to make the
+          # live demo use it; without it the demo falls back to the browser sandbox.
+          VITE_WS_URL: ${{ vars.VITE_WS_URL }}
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@v4
