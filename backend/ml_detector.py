@@ -135,8 +135,10 @@ class MLAnomalyDetector:
                 attack_type = "BruteForce"
 
         is_threat = attack_type is not None
+        # Every threat clears THREAT_THRESHOLD (or is a rule hit), so threats are critical;
+        # non-threats are graded by how close the model came.
         if is_threat:
-            severity = "critical" if score > 0.95 else "high" if score > 0.88 else "medium"
+            severity = "critical"
         else:
             severity = "medium" if score > 0.5 else "low"
 

@@ -85,6 +85,15 @@ const MAX_TELEMETRY_BUFFER = 120
 const MAX_RECONNECT_DELAY = 10000
 export const BACKEND_URL: string = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/chat'
 
+/** Host shown in the UI; falls back to the raw value if VITE_WS_URL is not a full URL. */
+export const BACKEND_LABEL: string = (() => {
+  try {
+    return new URL(BACKEND_URL).host || BACKEND_URL
+  } catch {
+    return BACKEND_URL
+  }
+})()
+
 let reconnectAttempts = 0
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let mockTelemetryTimer: ReturnType<typeof setInterval> | null = null
@@ -378,7 +387,10 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       if (existing && existing.readyState === WebSocket.OPEN) return
 
       try {
-        const ws = new WebSocket(wsUrl)
+        // A token baked into a public bundle is visible to anyone, so this only protects
+        // private deployments; the public demo should run without QG_WS_TOKEN.
+        const token = import.meta.env.VITE_WS_TOKEN
+        const ws = new WebSocket(token ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}` : wsUrl)
 
         ws.onopen = () => {
           console.log('[WS] Connected')
@@ -511,7 +523,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
         ws.onclose = () => {
           console.log('[WS] Disconnected')
-          set({ socket: null, isConnected: false })
+          set({ socket: null, isConnected: false, agentMode: null })
 
           if (get().isMockMode) return
 
@@ -543,7 +555,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       }
       const ws = get().socket
       if (ws) ws.close()
-      set({ socket: null, isConnected: false, isMockMode: false })
+      set({ socket: null, isConnected: false, isMockMode: false, agentMode: null })
     },
 
     sendMessage: (content: string) => {

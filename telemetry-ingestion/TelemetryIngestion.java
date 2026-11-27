@@ -18,7 +18,7 @@ import java.util.Random;
  *   java TelemetryIngestion                       stdin lines -> JSON lines on stdout
  *   java TelemetryIngestion --simulate 500        generated lines -> JSON lines on stdout
  *   java TelemetryIngestion --bench 2000000       measure parse+serialize throughput
- *   java TelemetryIngestion --emit URL [--rate N] [--attack]
+ *   java TelemetryIngestion --emit URL [--rate N] [--attack]   (sends X-Ingest-Token from $QG_INGEST_TOKEN)
  *                                                 stream generated traffic to the backend's
  *                                                 POST /ingest endpoint in batches
  */
@@ -62,29 +62,50 @@ public class TelemetryIngestion {
         r.starts[6] = start;
         r.ends[6] = len;
         r.raw = raw;
-        // port and bytes must be numeric
-        return isDigits(raw, r.starts[4], r.ends[4]) && isDigits(raw, r.starts[5], r.ends[5]);
+        // addresses must be present; port and bytes must be canonical non-negative integers
+        return r.ends[1] > r.starts[1] && r.ends[2] > r.starts[2]
+            && parseNumber(raw, r.starts[4], r.ends[4], 65535) >= 0
+            && parseNumber(raw, r.starts[5], r.ends[5], Integer.MAX_VALUE) >= 0;
     }
 
-    static boolean isDigits(String s, int from, int to) {
-        if (from >= to) return false;
+    /** Returns the value, or -1 if not digits, has a leading zero, or exceeds max. */
+    static long parseNumber(String s, int from, int to, long max) {
+        if (from >= to || to - from > 10) return -1;
+        if (to - from > 1 && s.charAt(from) == '0') return -1;
+        long v = 0;
         for (int i = from; i < to; i++) {
             char c = s.charAt(i);
-            if (c < '0' || c > '9') return false;
+            if (c < '0' || c > '9') return -1;
+            v = v * 10 + (c - '0');
         }
-        return true;
+        return v <= max ? v : -1;
+    }
+
+    /** Appends s[from,to) as JSON string content, escaping quotes, backslashes and control chars. */
+    static void appendEscaped(StringBuilder out, String s, int from, int to) {
+        for (int i = from; i < to; i++) {
+            char c = s.charAt(i);
+            if (c == '"' || c == '\\') out.append('\\').append(c);
+            else if (c < 0x20) out.append(String.format("\\u%04x", (int) c));
+            else out.append(c);
+        }
     }
 
     /** Appends the record as a JSON object matching the backend's /ingest event schema. */
     static void toJson(Record r, StringBuilder out) {
         String s = r.raw;
-        out.append("{\"ts\":\"").append(s, r.starts[0], r.ends[0]);
-        out.append("\",\"src_ip\":\"").append(s, r.starts[1], r.ends[1]);
-        out.append("\",\"dst_ip\":\"").append(s, r.starts[2], r.ends[2]);
-        out.append("\",\"protocol\":\"").append(s, r.starts[3], r.ends[3]);
+        out.append("{\"ts\":\"");
+        appendEscaped(out, s, r.starts[0], r.ends[0]);
+        out.append("\",\"src_ip\":\"");
+        appendEscaped(out, s, r.starts[1], r.ends[1]);
+        out.append("\",\"dst_ip\":\"");
+        appendEscaped(out, s, r.starts[2], r.ends[2]);
+        out.append("\",\"protocol\":\"");
+        appendEscaped(out, s, r.starts[3], r.ends[3]);
         out.append("\",\"port\":").append(s, r.starts[4], r.ends[4]);
         out.append(",\"bytes\":").append(s, r.starts[5], r.ends[5]);
-        out.append(",\"flags\":\"").append(s, r.starts[6], r.ends[6]);
+        out.append(",\"flags\":\"");
+        appendEscaped(out, s, r.starts[6], r.ends[6]);
         out.append("\"}");
     }
 
@@ -183,6 +204,7 @@ public class TelemetryIngestion {
 
     /** Streams generated traffic to the backend in ~1 batch per 500 ms. */
     static void emit(String url, int perTick, boolean attack) throws Exception {
+        String token = System.getenv().getOrDefault("QG_INGEST_TOKEN", "");
         // HTTP/1.1: the default h2c upgrade attempt on plain http is rejected by uvicorn
         HttpClient client = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
@@ -202,8 +224,10 @@ public class TelemetryIngestion {
                 toJson(r, body);
             }
             body.append("]}");
-            HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                .header("Content-Type", "application/json")
+            HttpRequest.Builder rb = HttpRequest.newBuilder(URI.create(url))
+                .header("Content-Type", "application/json");
+            if (!token.isEmpty()) rb.header("X-Ingest-Token", token);
+            HttpRequest req = rb
                 .timeout(Duration.ofSeconds(5))
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();

@@ -170,16 +170,20 @@ def set_attack_mode(active: bool):
 def block_ips(ips: list[str]):
     """Add IPs to the global blocklist and record mitigation time."""
     global _MITIGATION_TIME
+    global PROACTIVE_TRIGGERED
     BLOCKED_IPS.update(ips)
     _MITIGATION_TIME = time.time()
+    PROACTIVE_TRIGGERED = False  # a new incident after containment opens a new workspace
     print(f"[SIMULATOR] Blocked IPs: {ips}  (total blocked: {len(BLOCKED_IPS)})")
 
 
 def unblock_all():
     """Clear the blocklist (used on reset/clear)."""
     global _MITIGATION_TIME
+    global PROACTIVE_TRIGGERED
     BLOCKED_IPS.clear()
     _MITIGATION_TIME = None
+    PROACTIVE_TRIGGERED = False
     print("[SIMULATOR] All IPs unblocked")
 
 

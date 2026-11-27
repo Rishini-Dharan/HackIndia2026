@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useWebSocketStore, BACKEND_URL } from '../store/useWebSocketStore'
+import { useWebSocketStore, BACKEND_LABEL } from '../store/useWebSocketStore'
 import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban, Layers, Search, FileText, Sun, Moon } from 'lucide-react'
 
 export default function Sidebar({ theme, toggleTheme }: { theme: 'dark' | 'light'; toggleTheme: () => void }) {
@@ -67,7 +67,7 @@ export default function Sidebar({ theme, toggleTheme }: { theme: 'dark' | 'light
               : <WifiOff className="w-3.5 h-3.5 text-red" />
             }
             <span className="text-xs text-text-dim font-mono">
-              {isMockMode ? 'client-side sandbox' : new URL(BACKEND_URL).host}
+              {isMockMode ? 'client-side sandbox' : BACKEND_LABEL}
             </span>
           </div>
           <div
