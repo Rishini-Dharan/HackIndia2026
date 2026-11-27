@@ -6,7 +6,7 @@ Plans security workflows and routes user chat messages to either:
   2. A plain text agent response.
 
 Supports four modes:
-  - mock   (default) — keyword-based planning
+  - mock             — scripted keyword planner (used when no API key is configured)
   - groq             — Groq cloud API (OpenAI-compatible, fast inference)
   - openai           — OpenAI chat completions with function calling
   - ollama           — Local Ollama API
@@ -16,9 +16,11 @@ import os
 import json
 import random
 import httpx
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, ValidationError
 
 # ── Configuration ────────────────────────────────────────────────
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "mock")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
@@ -26,6 +28,41 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1/chat/completions")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3")
+
+
+def _default_provider() -> str:
+    if GROQ_API_KEY:
+        return "groq"
+    if OPENAI_API_KEY:
+        return "openai"
+    return "mock"
+
+
+# Unset LLM_PROVIDER means: use a real model if a key is present, otherwise the scripted planner.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER") or _default_provider()
+
+# What actually answered the most recent message. Sent to the UI so a fallback is never silent.
+LAST_MODE: dict = {"mode": "scripted" if LLM_PROVIDER == "mock" else "llm", "provider": LLM_PROVIDER, "reason": ""}
+
+
+def _set_mode(mode: str, provider: str, reason: str = ""):
+    LAST_MODE.update(mode=mode, provider=provider, reason=reason)
+
+
+class WidgetCall(BaseModel):
+    """Schema the planner's tool arguments must satisfy before anything is rendered."""
+    component: Literal["LiveTrafficChart", "ThreatTopology", "MitigationAction", "IncidentTriageBoard", "DynamicDashboard"]
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=400)
+    props: dict[str, Any] = Field(default_factory=dict)
+
+
+def parse_widget_call(raw_arguments: str) -> WidgetCall:
+    """Validate a render_security_widget tool call. Raises ValueError on bad output."""
+    try:
+        return WidgetCall.model_validate(json.loads(raw_arguments))
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise ValueError(f"invalid widget call: {e}") from e
 
 
 # ── Tool Definition (shared across providers) ───────────────────
@@ -316,7 +353,7 @@ async def _mock_route(user_text: str) -> list[dict]:
         hypothesis = latest_case.get("hypothesis", "Compromised external endpoint (45.33.12.99) is pushing SMB lateral movement anomalies to encrypt network files.")
         evidence = latest_case.get("evidence", [
             "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
-            "Java high-speed packet ingestion classified: threat score = 0.985."
+            "Scripted planner: example evidence for this case template."
         ])
         strategy = latest_case.get("strategy", "quarantine")
         notes = latest_case.get("notes", "Host isolated by operator.")
@@ -683,7 +720,13 @@ async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str
     if message.get("tool_calls"):
         for tc in message["tool_calls"]:
             if tc["function"]["name"] == "render_security_widget":
-                args = json.loads(tc["function"]["arguments"])
+                try:
+                    args = parse_widget_call(tc["function"]["arguments"]).model_dump()
+                except ValueError as e:
+                    print(f"[LLM] Rejected tool call: {e}")
+                    results.append({"type": "chat", "role": "agent",
+                                    "content": "The planner proposed a widget that failed schema validation, so I skipped it."})
+                    continue
                 widget_msg = {
                     "type": "widget",
                     "action": "mount",
@@ -773,52 +816,31 @@ async def _ollama_route(user_text: str) -> list[dict]:
         if content:
             return [{"type": "chat", "role": "agent", "content": content}]
     except Exception as e:
-        print(f"[LLM] Ollama unavailable ({e}). No mock fallback enabled.")
-        return [
-            {
-                "type": "chat",
-                "role": "agent",
-                "content": (
-                    "⚠️ Q-Guardian OS encountered an Ollama connection error. "
-                    "Please verify OLLAMA_BASE_URL and that Ollama is running."
-                ),
-            }
-        ]
+        raise RuntimeError(f"Ollama unavailable at {OLLAMA_BASE_URL}: {e}") from e
 
 
 async def plan_investigation(user_text: str) -> list[dict]:
     """
-    Main entry point. Plans security workflows through the configured LLM provider.
-    Returns a list of WebSocket messages to send back to the client.
+    Main entry point. Routes the message through the configured LLM provider.
+    If the provider fails, the scripted planner answers and LAST_MODE records why,
+    so the UI can show that the reply did not come from a model.
     """
     provider = LLM_PROVIDER.lower()
+    routes = {"groq": (_groq_route, GROQ_API_KEY), "openai": (_openai_route, OPENAI_API_KEY), "ollama": (_ollama_route, "local")}
 
-    if provider == "groq":
-        if not GROQ_API_KEY:
-            print("[LLM] GROQ_API_KEY not configured, falling back to mock mode")
-            return await _mock_route(user_text)
-        try:
-            return await _groq_route(user_text)
-        except Exception as e:
-            print(f"[LLM] Groq error: {e}. Falling back to mock mode.")
-            return await _mock_route(user_text)
+    if provider not in routes:
+        _set_mode("scripted", "mock", "no LLM provider configured")
+        return await _mock_route(user_text)
 
-    if provider == "openai":
-        if not OPENAI_API_KEY:
-            print("[LLM] OPENAI_API_KEY not configured, falling back to mock mode")
-            return await _mock_route(user_text)
-        try:
-            return await _openai_route(user_text)
-        except Exception as e:
-            print(f"[LLM] OpenAI error: {e}. Falling back to mock mode.")
-            return await _mock_route(user_text)
-
-    if provider == "ollama":
-        try:
-            return await _ollama_route(user_text)
-        except Exception as e:
-            print(f"[LLM] Ollama error: {e}. Falling back to mock mode.")
-            return await _mock_route(user_text)
-
-    # Default to mock
-    return await _mock_route(user_text)
+    route, key = routes[provider]
+    if not key:
+        _set_mode("scripted", "mock", f"{provider} selected but no API key set")
+        return await _mock_route(user_text)
+    try:
+        result = await route(user_text)
+        _set_mode("llm", provider)
+        return result
+    except Exception as e:
+        print(f"[LLM] {provider} error: {e}. Falling back to scripted planner.")
+        _set_mode("scripted", "mock", f"{provider} request failed: {type(e).__name__}")
+        return await _mock_route(user_text)
