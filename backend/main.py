@@ -16,9 +16,11 @@ if _env_path.exists():
     load_dotenv(_env_path)
     print(f"[CONFIG] Loaded env from {_env_path}")
 
+import hmac
+from datetime import datetime, timezone
 import time
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -28,6 +30,15 @@ import llm_orchestrator
 
 
 manager = ConnectionManager()
+
+# Shared secrets. Unset means open access, which is fine on localhost; any public
+# deployment must set QG_INGEST_TOKEN (render.yaml generates one).
+INGEST_TOKEN = os.getenv("QG_INGEST_TOKEN", "")
+WS_TOKEN = os.getenv("QG_WS_TOKEN", "")
+
+
+def _token_ok(expected: str, given: str | None) -> bool:
+    return not expected or (given is not None and hmac.compare_digest(expected.encode(), given.encode()))
 
 
 @asynccontextmanager
@@ -90,19 +101,28 @@ class IngestBatch(BaseModel):
 
 
 @app.post("/ingest")
-async def ingest(batch: IngestBatch):
+async def ingest(batch: IngestBatch, x_ingest_token: str | None = Header(default=None)):
     """Receives parsed telemetry batches from the Java ingestion service.
     While batches keep arriving, the built-in simulator stays paused."""
-    sim.LAST_INGEST_AT = time.time()
+    if not _token_ok(INGEST_TOKEN, x_ingest_token):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or missing X-Ingest-Token")
+    if batch.events:
+        sim.LAST_INGEST_AT = time.time()
     threats = 0
     for ev in batch.events:
-        result = await sim.process_event(manager, ev.model_dump())
+        raw = ev.model_dump()
+        if raw["ts"] and raw["ts"].isdigit():  # Java sends epoch seconds; the UI expects ISO 8601
+            raw["ts"] = datetime.fromtimestamp(int(raw["ts"]), tz=timezone.utc).isoformat()
+        result = await sim.process_event(manager, raw)
         threats += bool(result.get("is_threat"))
     return {"accepted": len(batch.events), "threats": threats}
 
 
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
+    if not _token_ok(WS_TOKEN, websocket.query_params.get("token")):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
     session_id = await manager.connect(websocket)
     print(f"[WS] Client connected: {session_id}")
 

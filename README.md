@@ -92,6 +92,9 @@ CI runs the backend tests, compiles and smoke-tests the Java parser, and builds 
 
 ## Deploying the backend
 
+Set `QG_INGEST_TOKEN` on any public deployment (`render.yaml` generates one) and give the same value to the ingester, which sends it as `X-Ingest-Token`. `QG_WS_TOKEN` (frontend: `VITE_WS_TOKEN`) locks the WebSocket for private deployments. Don't set it for the public demo: a token in a static bundle is visible to anyone.
+
+
 `render.yaml` deploys the backend as a Render web service. After it is up, set the repository variable `VITE_WS_URL=wss://<service>.onrender.com/ws/chat` and re-run the Pages workflow, and the live demo will use the real backend instead of the sandbox.
 
 ## Hackathon material
