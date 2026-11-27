@@ -131,32 +131,17 @@ Remember: If the user says "hi" or asks a general question, just TALK to them na
 
 # ── Mock Mode (keyword-based intent matching) ────────────────────
 
-def _generate_threat_nodes():
-    """Generate realistic threat topology data."""
-    attacker_ips = [f"45.33.{random.randint(1,254)}.{random.randint(1,254)}" for _ in range(random.randint(1, 3))]
-    victim_ips = [f"192.168.1.{random.randint(1,50)}" for _ in range(random.randint(2, 5))]
-    clean_ips = [f"10.0.0.{random.randint(1,20)}" for _ in range(random.randint(3, 6))]
+def _live_topology() -> dict:
+    """Topology from the backend's real recent detections (never invented)."""
+    import anomaly_simulator
+    return anomaly_simulator.build_topology()
 
-    nodes = []
-    edges = []
 
-    for ip in attacker_ips:
-        nodes.append({"id": ip, "type": "attacker", "label": ip, "severity": "critical"})
-
-    for ip in victim_ips:
-        nodes.append({"id": ip, "type": "victim", "label": ip, "severity": "high"})
-        src = random.choice(attacker_ips)
-        edges.append({
-            "source": src,
-            "target": ip,
-            "attackType": random.choice(["DDoS", "SQLi", "XSS", "BruteForce"]),
-            "bandwidth": random.randint(100, 10000),
-        })
-
-    for ip in clean_ips:
-        nodes.append({"id": ip, "type": "clean", "label": ip, "severity": "low"})
-
-    return nodes, edges
+def _live_threat_ips(user_text: str = "", proposed: list | None = None) -> list[str]:
+    """Containment targets: IPs the operator named, else active attackers."""
+    import anomaly_simulator
+    named = [ip for ip in (proposed or []) if isinstance(ip, str) and ip in user_text]
+    return named or anomaly_simulator.active_attackers()
 
 
 async def _mock_route(user_text: str) -> list[dict]:
@@ -185,12 +170,13 @@ async def _mock_route(user_text: str) -> list[dict]:
 
     # ── Threat / topology intents ────────────────────────────────
     if any(kw in s for kw in ["threat", "topology", "blast", "attack", "map", "graph", "radius", "analyze", "analyse"]):
-        nodes, edges = _generate_threat_nodes()
+        topo = _live_topology()
+        nodes, edges = topo["nodes"], topo["edges"]
         return [
             {
                 "type": "chat",
                 "role": "agent",
-                "content": f"🔍 Detected {len([n for n in nodes if n['type'] == 'attacker'])} attacker node(s) targeting {len([n for n in nodes if n['type'] == 'victim'])} servers. Mounting the threat topology.",
+                "content": f"🔍 {topo['summary']} Mounting the threat topology.",
             },
             {
                 "type": "widget",
@@ -509,12 +495,9 @@ async def _mock_route(user_text: str) -> list[dict]:
                 "props": {
                     "title": "Mitigation Action Panel",
                     "description": "Isolate compromised endpoints",
-                    "threatIps": [
-                        f"45.33.{random.randint(1,254)}.{random.randint(1,254)}"
-                        for _ in range(random.randint(2, 5))
-                    ],
-                    "attackType": random.choice(["Volumetric DDoS", "SQL Injection", "Brute Force"]),
-                    "severity": random.choice(["high", "critical"]),
+                    "threatIps": _live_threat_ips(user_text),
+                    "attackType": "Active detections",
+                    "severity": "critical" if _live_threat_ips() else "low",
                     "blockDurationHours": 24,
                     "scope": "global"
                 },
@@ -741,18 +724,18 @@ async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str
                     },
                 }
 
-                # For topology, generate node data if not provided
-                if args["component"] == "ThreatTopology" and "nodes" not in widget_msg["props"]:
-                    nodes, edges = _generate_threat_nodes()
-                    widget_msg["props"]["nodes"] = nodes
-                    widget_msg["props"]["edges"] = edges
+                # Topology always comes from real detections; nodes the model
+                # proposes are discarded so it can't invent attackers.
+                if args["component"] == "ThreatTopology":
+                    topo = _live_topology()
+                    widget_msg["props"]["nodes"] = topo["nodes"]
+                    widget_msg["props"]["edges"] = topo["edges"]
+                    widget_msg["props"]["description"] = topo["summary"]
 
-                # For mitigation, generate IPs if not provided
-                if args["component"] == "MitigationAction" and "threatIps" not in widget_msg["props"]:
-                    widget_msg["props"]["threatIps"] = [
-                        f"45.33.{random.randint(1,254)}.{random.randint(1,254)}"
-                        for _ in range(random.randint(2, 5))
-                    ]
+                # Containment targets: IPs the operator named, else active attackers.
+                if args["component"] == "MitigationAction":
+                    widget_msg["props"]["threatIps"] = _live_threat_ips(
+                        user_text, widget_msg["props"].get("threatIps"))
 
                 results.append(widget_msg)
 
