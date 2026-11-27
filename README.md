@@ -5,7 +5,9 @@
 [![CI](https://github.com/Rishini-Dharan/HackIndia2026/actions/workflows/ci.yml/badge.svg)](https://github.com/Rishini-Dharan/HackIndia2026/actions/workflows/ci.yml)
 · [Live demo](https://rishini-dharan.github.io/HackIndia2026/) · Built for HackIndia Spark-9 2026, Track 04 (stateful AI agents with dynamic UI)
 
-![Investigation workspace after a ransomware-style detection](docs/images/attack-workspace.png)
+![Real pipeline: Java ingester streams traffic, an SMB attack is detected and tagged T1486, the analyst blocks it](docs/images/demo.gif)
+
+*Recorded on the real pipeline (Java ingester → `/ingest` → detector → WebSocket), not the browser sandbox.*
 
 A Java service parses packet telemetry and streams it to a FastAPI hub. A detector trained on NSL-KDD scores each event. When something critical shows up, the backend opens an investigation workspace, and an LLM planner decides which widgets the analyst needs next: traffic, blast-radius graph, triage board, containment controls, or a generated report. The planner emits validated JSON, and a fixed component registry renders it, so the model never writes UI code.
 
@@ -14,9 +16,9 @@ A Java service parses packet telemetry and streams it to a FastAPI hub. A detect
 | Part | Status |
 |---|---|
 | Java ingestion | Real. It parses `ts\|src\|dst\|proto\|port\|bytes\|flags` with a single `charAt` pass and POSTs batches to `/ingest`. The traffic it sends is generated; there is no packet capture. |
-| Detector | Real model. Multinomial logistic regression trained on NSL-KDD and evaluated on the held-out `KDDTest+` set (numbers below). Ransomware is a **signature rule** (SMB bulk transfer from an external IP), because NSL-KDD has no ransomware class. |
+| Detector | Real model. Multinomial logistic regression trained on NSL-KDD and evaluated on the held-out `KDDTest+` set (numbers below). Ransomware is a **signature rule** (SMB bulk transfer from an external IP), because NSL-KDD has no ransomware class. Each detection is tagged with its closest MITRE ATT&CK technique: a port scan maps to T1046 Network Service Discovery, the SMB rule to T1486 Data Encrypted for Impact. |
 | Planner | Real LLM (Groq `llama-3.3-70b-versatile` or OpenAI) when a key is set. Without one, a scripted keyword planner answers. The sidebar always shows which one answered, and a failed LLM call never falls back silently. |
-| Memory | Qdrant (cloud, or in-memory fallback) with Gemini embeddings, or a deterministic hash embedding when no key is set. |
+| Memory | Qdrant Cloud, or an on-disk local store (`backend/.qdrant`) that survives restarts. Every opened and contained case is saved as a full workspace snapshot; asking the agent to *continue* or *resume* reopens the latest one. Embeddings come from Gemini, or from a deterministic hash when no key is set. |
 | Hosted demo | **Browser sandbox.** GitHub Pages has no backend, so the demo replays scripted telemetry and agent replies in the browser and labels itself that way. Run locally (below) for the real pipeline. |
 
 ## Numbers
@@ -101,4 +103,4 @@ Set `QG_INGEST_TOKEN` on any public deployment (`render.yaml` generates one) and
 
 The original submission README, jury walkthrough and pitch script are in [`docs/hackathon/`](docs/hackathon/).
 
-![Workspace after isolating the attacker](docs/images/post-mitigation.png)
+![Investigation workspace (browser sandbox)](docs/images/attack-workspace.png)

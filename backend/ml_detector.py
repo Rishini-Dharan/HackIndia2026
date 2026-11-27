@@ -38,6 +38,17 @@ SSH_PORTS = {22}
 # benign database/ICMP traffic; at 0.95 it flagged none while scans and floods still
 # score > 0.97. Held-out precision/recall at this operating point is in ml/metrics.json.
 THREAT_THRESHOLD = 0.95
+
+# MITRE ATT&CK technique for each attack label (enterprise matrix, v15).
+# NSL-KDD categories are coarse, so these are the closest technique, not a proof of it.
+MITRE_ATTACK = {
+    "Ransomware": ("T1486", "Data Encrypted for Impact", "Impact"),
+    "DDoS": ("T1498", "Network Denial of Service", "Impact"),
+    "PortScan": ("T1046", "Network Service Discovery", "Discovery"),
+    "BruteForce": ("T1110", "Brute Force", "Credential Access"),
+    "Intrusion": ("T1190", "Exploit Public-Facing Application", "Initial Access"),
+    "PrivilegeEscalation": ("T1068", "Exploitation for Privilege Escalation", "Privilege Escalation"),
+}
 SMB_BULK_BYTES = 20_000          # rule: SMB transfer larger than this from an external IP
 RULE_SCORE = 0.97                # confidence assigned to signature hits (critical severity)
 
@@ -154,4 +165,7 @@ class MLAnomalyDetector:
             "attack_type": attack_type,
             "score": round(score, 3),
             "detector": detector,
+            "mitre": (
+                {"id": t[0], "name": t[1], "tactic": t[2]} if (t := MITRE_ATTACK.get(attack_type)) else None
+            ),
         }

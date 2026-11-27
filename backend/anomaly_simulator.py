@@ -204,6 +204,7 @@ async def process_event(manager, raw_event: dict) -> dict:
     if event["is_threat"] and event["severity"] == "critical" and not PROACTIVE_TRIGGERED:
         import ws_handler
         ws_handler.reset_current_workspace(event)
+        ws_handler.save_active_investigation()
         print(f"[DETECT] {event['attack_type']} from {event['src_ip']} score={event['score']} via {event['detector']}")
         await manager.broadcast({
             "type": "chat",

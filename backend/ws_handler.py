@@ -3,6 +3,7 @@ Q-Guardian OS — WebSocket Connection Manager & Message Handler
 """
 
 import uuid
+from datetime import datetime, timezone
 import json
 from fastapi import WebSocket
 from llm_orchestrator import plan_investigation
@@ -17,6 +18,8 @@ LAST_EVIDENCE: list[str] = list(TEMPLATE_EVIDENCE)
 # Addresses baked into the demo template. A live detection swaps in its own.
 TEMPLATE_ATTACKER, TEMPLATE_VICTIM = "45.33.12.99", "192.168.1.10"
 ATTACKER_IP, VICTIM_IP = TEMPLATE_ATTACKER, TEMPLATE_VICTIM
+TEMPLATE_CASE_ID = "INV-412"
+CASE_ID = TEMPLATE_CASE_ID
 
 HYPOTHESES = {
     "Ransomware": "External endpoint {src} is pushing bulk SMB transfers to {dst}, consistent with ransomware lateral movement.",
@@ -27,11 +30,16 @@ HYPOTHESES = {
 
 
 def retarget(obj):
-    """Replace the template attacker/victim addresses with the live ones."""
-    if (ATTACKER_IP, VICTIM_IP) == (TEMPLATE_ATTACKER, TEMPLATE_VICTIM):
+    """Replace the template attacker/victim addresses and case id with the live ones."""
+    if (ATTACKER_IP, VICTIM_IP, CASE_ID) == (TEMPLATE_ATTACKER, TEMPLATE_VICTIM, TEMPLATE_CASE_ID):
         return obj
-    text = json.dumps(obj).replace(TEMPLATE_ATTACKER, ATTACKER_IP).replace(TEMPLATE_VICTIM, VICTIM_IP)
+    text = (json.dumps(obj).replace(TEMPLATE_ATTACKER, ATTACKER_IP)
+            .replace(TEMPLATE_VICTIM, VICTIM_IP).replace(TEMPLATE_CASE_ID, CASE_ID))
     return json.loads(text)
+
+
+# Scripted demo replies are written against the template case; rewrite them for a live one.
+RETARGETED_TYPES = {"chat", "widget", "workspace_mount"}
 
 
 def _evidence_from(event: dict) -> list[str]:
@@ -39,19 +47,21 @@ def _evidence_from(event: dict) -> list[str]:
         f"{event['bytes']:,} bytes from {event['src_ip']} to {event['dst_ip']}:{event['port']} ({event['protocol']}).",
         f"Classified as {event['attack_type']} with score {event['score']} by `{event['detector']}`.",
         f"Severity {event['severity']}; first seen {event['ts']}.",
+        *([f"MITRE ATT&CK {m['id']} {m['name']} ({m['tactic']})."] if (m := event.get("mitre")) else []),
     ]
 
 
 def reset_current_workspace(event: dict | None = None):
     """Build the investigation workspace. With a detection event, the evidence,
     confidence, hypothesis and node addresses come from that event instead of the template."""
-    global CURRENT_WORKSPACE, LAST_EVIDENCE, ATTACKER_IP, VICTIM_IP
+    global CURRENT_WORKSPACE, LAST_EVIDENCE, ATTACKER_IP, VICTIM_IP, CASE_ID
     _build_template_workspace()
     if not event:
-        ATTACKER_IP, VICTIM_IP = TEMPLATE_ATTACKER, TEMPLATE_VICTIM
+        ATTACKER_IP, VICTIM_IP, CASE_ID = TEMPLATE_ATTACKER, TEMPLATE_VICTIM, TEMPLATE_CASE_ID
         LAST_EVIDENCE = list(TEMPLATE_EVIDENCE)
         return
     ATTACKER_IP, VICTIM_IP = event["src_ip"], event["dst_ip"]
+    CASE_ID = f"INV-{datetime.now(timezone.utc):%m%d-%H%M%S}"
     CURRENT_WORKSPACE = retarget(CURRENT_WORKSPACE)
     LAST_EVIDENCE = _evidence_from(event)
     CURRENT_WORKSPACE["evidence"] = LAST_EVIDENCE
@@ -119,6 +129,48 @@ reset_current_workspace()
 
 
 
+def save_active_investigation():
+    """Snapshot the open workspace to Qdrant so it can be resumed after a restart."""
+    qdrant_memory.add_investigation(
+        case_id=CURRENT_WORKSPACE["id"],
+        status="active",
+        evidence=LAST_EVIDENCE,
+        hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""),
+        strategy="pending",
+        notes="Opened automatically on a critical detection.",
+        threat_confidence=CURRENT_WORKSPACE.get("confidence", 0.0),
+        widgets_open=[w["component"] for w in CURRENT_WORKSPACE.get("layout", [])],
+        workspace=CURRENT_WORKSPACE,
+    )
+
+
+async def restore_latest_investigation(manager, websocket) -> bool:
+    """Reopen the most recently saved case exactly as it was stored. Returns False
+    when nothing restorable is saved, so the planner can answer instead."""
+    global CURRENT_WORKSPACE, LAST_EVIDENCE, ATTACKER_IP, VICTIM_IP, CASE_ID
+    case = qdrant_memory.get_latest_investigation()
+    if not case or not case.get("workspace"):
+        return False
+    CURRENT_WORKSPACE = case["workspace"]
+    LAST_EVIDENCE = case.get("evidence") or LAST_EVIDENCE
+    containment = next((w for w in CURRENT_WORKSPACE.get("layout", []) if w.get("component") == "MitigationAction"), None)
+    ips = (containment or {}).get("props", {}).get("threatIps") or []
+    if ips:
+        ATTACKER_IP = ips[0]
+    CASE_ID = case["case_id"]
+    await manager.send_personal(websocket, {
+        "type": "chat",
+        "role": "agent",
+        "content": (
+            f"Restored **{case['case_id']}** from Qdrant memory (saved {case.get('timestamp', 'earlier')[:19].replace('T', ' ')} UTC, "
+            f"status **{case.get('status')}**).\n\n**Hypothesis:** {case.get('hypothesis', '')}\n\n"
+            f"**Last step:** {case.get('notes', '')}"
+        ),
+    })
+    await manager.send_personal(websocket, {"type": "workspace_mount", "workspace": CURRENT_WORKSPACE})
+    return True
+
+
 class ConnectionManager:
     """Manages active WebSocket connections and broadcasts."""
 
@@ -135,6 +187,8 @@ class ConnectionManager:
         self.active_connections.pop(session_id, None)
 
     async def send_personal(self, websocket: WebSocket, message: dict):
+        if message.get("type") in RETARGETED_TYPES:
+            message = retarget(message)
         try:
             await websocket.send_json(message)
         except Exception:
@@ -142,6 +196,8 @@ class ConnectionManager:
 
     async def broadcast(self, message: dict):
         """Send a message to all connected clients."""
+        if message.get("type") in RETARGETED_TYPES:
+            message = retarget(message)
         disconnected = []
         for sid, ws in self.active_connections.items():
             try:
@@ -175,6 +231,11 @@ async def handle_ws_message(
 
         # ── WOW Moment: Dynamic Workspace Morphing / Evolving ─────────
         user_lower = user_text.lower()
+
+        # ── Resume the last saved investigation from Qdrant ──────────
+        if any(kw in user_lower for kw in ["continue", "resume", "yesterday", "last investigation", "last case"]):
+            if await restore_latest_investigation(manager, websocket):
+                return
         if any(kw in user_lower for kw in ["compare", "comparison"]):
             # Add comparison panel to CURRENT_WORKSPACE layout
             has_comparison = any(w["id"] == "comparison-widget" for w in CURRENT_WORKSPACE.get("layout", []))
@@ -262,7 +323,7 @@ async def handle_ws_message(
 
             # Save the resolved False Positive investigation state to Qdrant memory!
             qdrant_memory.add_investigation(
-                case_id="INV-412",
+                case_id=CASE_ID,
                 status="resolved_false_positive",
                 evidence=CURRENT_WORKSPACE["evidence"],
                 hypothesis=CURRENT_WORKSPACE["hypothesis"],
@@ -383,13 +444,16 @@ async def handle_ws_message(
 
             # Save the completed ransomware investigation profile to Qdrant vector store!
             qdrant_memory.add_investigation(
-                case_id="INV-412",
+                case_id=CASE_ID,
                 status="neutralized",
                 evidence=LAST_EVIDENCE,
                 hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""),
                 strategy=strategy,
-                notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}"
+                notes=f"Threat successfully mitigated by isolating IPs: {', '.join(ips)}. {notes}",
+                threat_confidence=CURRENT_WORKSPACE.get("confidence", 0.0),
+                resolved=True,
             )
+            case_id = CASE_ID
 
             # ── Reactive: Block IPs in the simulator & stop attack mode ──
             import anomaly_simulator
@@ -475,6 +539,13 @@ async def handle_ws_message(
                 ]
             }
             CURRENT_WORKSPACE = retarget(CURRENT_WORKSPACE)
+            # Snapshot the contained state so "continue" reopens it as it is now.
+            qdrant_memory.add_investigation(
+                case_id=case_id, status="neutralized", evidence=LAST_EVIDENCE,
+                hypothesis=CURRENT_WORKSPACE.get("hypothesis", ""), strategy=strategy,
+                notes=f"Isolated {', '.join(ips)} ({strategy}).", resolved=True,
+                workspace=CURRENT_WORKSPACE,
+            )
 
             await manager.broadcast({
                 "type": "workspace_mount",

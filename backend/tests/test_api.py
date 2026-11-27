@@ -120,3 +120,55 @@ def test_empty_batch_does_not_pause_simulator_and_epoch_ts_is_converted():
                 if m["type"] == "telemetry" and m["data"]["src_ip"] == "10.0.1.9":
                     break
     assert m["data"]["ts"].startswith("2024-07-03T")
+
+
+def test_continue_restores_latest_saved_case():
+    import qdrant_memory
+    import ws_handler
+
+    qdrant_memory.clear_memories()
+    sim.PROACTIVE_TRIGGERED = False
+    sim.BLOCKED_IPS.clear()
+    with TestClient(main.app) as client:
+        client.post("/ingest", json=_scan_batch("198.51.100.44"))
+        saved_id = ws_handler.CURRENT_WORKSPACE["id"]
+        ws_handler.reset_current_workspace()  # simulate a restart losing in-process state
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.receive_json(); ws.receive_json()
+            ws.send_json({"type": "chat", "content": "continue yesterday's investigation"})
+            msgs = []
+            for _ in range(30):
+                msgs.append(ws.receive_json())
+                if msgs[-1]["type"] == "workspace_mount":
+                    break
+    chat = next(m for m in msgs if m["type"] == "chat" and "Restored" in m["content"])
+    assert saved_id in chat["content"]
+    workspace = msgs[-1]["workspace"]
+    assert workspace["id"] == saved_id
+    assert any("T1046" in e for e in workspace["evidence"])
+    assert "198.51.100.44" in workspace["hypothesis"]
+    ws_handler.reset_current_workspace()
+
+
+def test_live_case_id_replaces_template_id_everywhere():
+    import ws_handler
+    sim.PROACTIVE_TRIGGERED = False
+    sim.BLOCKED_IPS.clear()
+    with TestClient(main.app) as client:
+        with client.websocket_connect("/ws/chat") as ws:
+            ws.receive_json(); ws.receive_json()
+            client.post("/ingest", json=_scan_batch("198.51.100.77"))
+            case_id = ws_handler.CASE_ID
+            assert case_id != "INV-412"
+            ws.send_json({"type": "action", "payload": {"action": "isolate_ip", "ips": ["198.51.100.77"], "strategy": "block"}})
+            msgs = []
+            for _ in range(60):
+                msgs.append(ws.receive_json())
+                if msgs[-1]["type"] == "workspace_mount" and "Post-Mitigation" in msgs[-1]["workspace"]["title"]:
+                    break
+    blob = str([m for m in msgs if m["type"] in {"chat", "workspace_mount"}])
+    assert "INV-412" not in blob
+    assert case_id in blob
+    assert msgs[-1]["workspace"]["id"] == case_id
+    sim.unblock_all()
+    ws_handler.reset_current_workspace()
