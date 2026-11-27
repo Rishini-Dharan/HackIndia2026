@@ -1,0 +1,201 @@
+{
+  "summary": {
+    "mode": "scripted",
+    "provider": "mock",
+    "model": "scripted",
+    "fallback_cases": 0,
+    "valid": true,
+    "cases": 12,
+    "passed": 6,
+    "accuracy": 0.5,
+    "median_latency_s": 0.0
+  },
+  "cases": [
+    {
+      "prompt": "good morning",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "how does ransomware usually spread inside a network?",
+      "expect": [],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "graph the packets per second we're seeing right now",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "who is attacking which servers? draw it",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 0.12,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "what incidents are open right now?",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "quarantine 203.0.113.50",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "give me a summary report of today's incidents for my manager",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "show me a table of the top talkers on the network",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "plot traffic, and also show me the containment controls",
+      "expect": [
+        "LiveTrafficChart",
+        "MitigationAction"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "map the attackers and list the open incidents",
+      "expect": [
+        "ThreatTopology",
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "I need the traffic graph, the attack map and the block controls",
+      "expect": [
+        "LiveTrafficChart",
+        "ThreatTopology",
+        "MitigationAction"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": false,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    },
+    {
+      "prompt": "thanks, that's helpful",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.0,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "no LLM provider configured"
+      }
+    }
+  ]
+}

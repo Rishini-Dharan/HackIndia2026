@@ -36,14 +36,14 @@ The model only uses features the runtime can compute from a sliding window (byte
 
 **Ingestion**: about **4.0M records/s** parse and serialize on one core (Java 21, laptop CPU, `java TelemetryIngestion --bench 2000000`, 3 runs: 3.9M to 4.1M).
 
-**Planner eval** (`backend/eval`, 20 requests, pass means the exact set of widgets mounted):
+**Planner eval** (`backend/eval`, pass means the exact set of widgets mounted). `cases.json` (20 requests) was used while writing the prompt; `holdout.json` (12 requests, 3 needing two or three widgets) was written afterwards and never tuned on.
 
-| Planner | Accuracy | Misses |
+| Planner | Main set (20) | Held-out (12) |
 |---|---|---|
-| Scripted keyword planner | 16/20 | paraphrases ("rate-limit the IPs"), reports, both two-widget requests |
-| `openai/gpt-oss-120b` on Groq | 16/20 (two runs, 0 fallbacks) | both two-widget requests (makes one tool call), "list incidents by severity" (picks a generic table), one malformed tool-call JSON |
+| Scripted keyword planner | 16/20 | 6/12 |
+| `openai/gpt-oss-120b` on Groq | **20/20** (two runs, 0 fallbacks) | **12/12** (0 fallbacks) |
 
-The model handles paraphrases and reports the keyword planner can't, but neither composes two widgets from one request yet, which is the next thing to fix. Free Groq tiers cap tokens per minute, so run the eval with `--delay 10`; the summary marks a run invalid if any case fell back to the scripted planner.
+The jump from 16 to 20 came from changing the tool, not the prompt: the planner now returns every widget in one `render_security_widgets` call. With one widget per call, the model made one call and dropped the second view of a two-part request. Free Groq tiers cap tokens per minute, so run the eval with `--delay 10`; a run is marked invalid if any case fell back to the scripted planner.
 
 ## Architecture
 

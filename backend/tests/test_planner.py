@@ -56,3 +56,32 @@ def test_fallback_reason_names_status_and_error_code(monkeypatch):
     asyncio.run(llm.plan_investigation("hello"))
     assert "HTTP 404 model_not_found" in llm.LAST_MODE["reason"]
     assert "test-key" not in llm.LAST_MODE["reason"]
+
+
+def test_batch_call_mounts_every_widget_in_order():
+    calls = llm.parse_widget_batch(json.dumps({"widgets": [
+        {"component": "LiveTrafficChart", "title": "Traffic"},
+        {"component": "ThreatTopology", "title": "Topology"},
+    ]}))
+    assert [c.component for c in calls] == ["LiveTrafficChart", "ThreatTopology"]
+
+
+def test_legacy_single_widget_call_still_accepted():
+    calls = llm.parse_widget_batch(json.dumps({"component": "MitigationAction", "title": "Contain"}))
+    assert [c.component for c in calls] == ["MitigationAction"]
+
+
+@pytest.mark.parametrize("payload", [
+    {"widgets": []},
+    {"widgets": [{"component": "LiveTrafficChart", "title": "t"}] * 5},
+    {"widgets": [{"component": "LiveTrafficChart", "title": "ok"}, {"component": "Nope", "title": "bad"}]},
+])
+def test_invalid_batches_are_rejected_whole(payload):
+    with pytest.raises(ValueError):
+        llm.parse_widget_batch(json.dumps(payload))
+
+
+def test_tool_schema_is_a_widget_list():
+    params = llm.RENDER_WIDGET_TOOL["function"]["parameters"]
+    assert llm.RENDER_WIDGET_TOOL["function"]["name"] == "render_security_widgets"
+    assert params["properties"]["widgets"]["maxItems"] == 4
