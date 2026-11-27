@@ -40,3 +40,19 @@ def test_provider_failure_falls_back_visibly(monkeypatch):
     assert msgs
     assert llm.LAST_MODE["mode"] == "scripted"
     assert "groq request failed" in llm.LAST_MODE["reason"]
+
+
+def test_fallback_reason_names_status_and_error_code(monkeypatch):
+    import httpx
+
+    async def not_found(_):
+        req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+        resp = httpx.Response(404, request=req, json={"error": {"code": "model_not_found", "message": "secret-free"}})
+        raise httpx.HTTPStatusError("404", request=req, response=resp)
+
+    monkeypatch.setattr(llm, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(llm, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_groq_route", not_found)
+    asyncio.run(llm.plan_investigation("hello"))
+    assert "HTTP 404 model_not_found" in llm.LAST_MODE["reason"]
+    assert "test-key" not in llm.LAST_MODE["reason"]
