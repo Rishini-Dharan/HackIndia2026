@@ -172,3 +172,54 @@ def test_live_case_id_replaces_template_id_everywhere():
     assert msgs[-1]["workspace"]["id"] == case_id
     sim.unblock_all()
     ws_handler.reset_current_workspace()
+
+
+def test_topology_uses_only_real_detections():
+    import llm_orchestrator as llm
+    sim.RECENT_EVENTS.clear()
+    sim.BLOCKED_IPS.clear()
+    empty = sim.build_topology()
+    assert not [n for n in empty["nodes"] if n["type"] == "attacker"]
+    assert "No active threats" in empty["summary"]
+
+    sim.PROACTIVE_TRIGGERED = True  # keep this test from opening a workspace
+    with TestClient(main.app) as client:
+        client.post("/ingest", json=_scan_batch("198.51.100.90"))
+    topo = sim.build_topology()
+    attackers = [n["id"] for n in topo["nodes"] if n["type"] == "attacker"]
+    assert attackers == ["198.51.100.90"]
+    assert all(e["source"] == "198.51.100.90" and e["attackType"] == "PortScan" for e in topo["edges"])
+    assert llm._live_threat_ips("block them") == ["198.51.100.90"]
+    assert llm._live_threat_ips("block 203.0.113.5", ["203.0.113.5", "1.2.3.4"]) == ["203.0.113.5"]
+
+    sim.BLOCKED_IPS.add("198.51.100.90")
+    assert not [n for n in sim.build_topology()["nodes"] if n["type"] == "attacker"]
+    sim.BLOCKED_IPS.clear()
+    sim.PROACTIVE_TRIGGERED = False
+
+
+def test_llm_proposed_topology_nodes_are_replaced(monkeypatch):
+    import asyncio
+    import json as _json
+    import llm_orchestrator as llm
+    sim.RECENT_EVENTS.clear()
+
+    class FakeResp:
+        def raise_for_status(self): pass
+        def json(self):
+            args = {"component": "ThreatTopology", "title": "Map",
+                    "props": {"nodes": [{"id": "6.6.6.6", "type": "attacker"}]}}
+            return {"choices": [{"message": {"content": None, "tool_calls": [
+                {"function": {"name": "render_security_widget", "arguments": _json.dumps(args)}}]}}]}
+
+    class FakeClient:
+        def __init__(self, *a, **k): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): pass
+        async def post(self, *a, **k): return FakeResp()
+
+    monkeypatch.setattr(llm.httpx, "AsyncClient", FakeClient)
+    msgs = asyncio.run(llm._openai_compatible_route("map the attack", api_url="x", api_key="k", model="m"))
+    widget = next(m for m in msgs if m["type"] == "widget")
+    assert all(n["id"] != "6.6.6.6" for n in widget["props"]["nodes"])
+    assert "No active threats" in widget["props"]["description"]

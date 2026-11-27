@@ -84,37 +84,19 @@ export default function ThreatTopology({ props }: { props: Record<string, unknow
     const width = 600
     const height = 320
     const cx = width / 2
-    const cy = height / 2
 
     const attackers = nodes.filter(n => n.type === 'attacker')
     const victims = nodes.filter(n => n.type === 'victim')
     const clean = nodes.filter(n => n.type === 'clean')
 
-    // Attackers on the left
-    attackers.forEach((n, i) => {
-      const angle = ((i - (attackers.length - 1) / 2) * 0.5) - Math.PI * 0.8
-      pos[n.id] = {
-        x: cx + Math.cos(angle) * 180,
-        y: cy + Math.sin(angle) * 100,
-      }
-    })
-
-    // Victims in the center-right
-    victims.forEach((n, i) => {
-      const angle = ((i - (victims.length - 1) / 2) * 0.4)
-      pos[n.id] = {
-        x: cx + 40 + Math.cos(angle) * 60,
-        y: cy + Math.sin(angle) * 90,
-      }
-    })
-
-    // Clean hosts on the right
-    clean.forEach((n, i) => {
-      const angle = ((i - (clean.length - 1) / 2) * 0.5) + Math.PI * 0.15
-      pos[n.id] = {
-        x: cx + Math.cos(angle) * 220,
-        y: cy + Math.sin(angle) * 110,
-      }
+    // Three columns (attackers → targets → clean hosts), evenly spaced
+    // vertically so labels never overlap. A missing group frees its column.
+    const groups = [attackers, victims, clean].filter(g => g.length > 0)
+    groups.forEach((group, col) => {
+      const x = groups.length === 1 ? cx : 90 + (col * (width - 180)) / (groups.length - 1)
+      group.forEach((n, i) => {
+        pos[n.id] = { x, y: ((i + 1) * height) / (group.length + 1) }
+      })
     })
 
     return pos

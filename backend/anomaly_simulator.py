@@ -14,6 +14,8 @@ Features:
 import asyncio
 import random
 import time
+from collections import Counter, deque
+from ipaddress import ip_address
 from datetime import datetime, timezone
 from ml_detector import MLAnomalyDetector
 
@@ -187,6 +189,72 @@ def unblock_all():
     print("[SIMULATOR] All IPs unblocked")
 
 
+# Recent classified events, the only source for topology and containment targets.
+RECENT_EVENTS: deque = deque(maxlen=1000)
+TOPOLOGY_WINDOW_SECONDS = 600
+MAX_NODES_PER_GROUP = 6
+
+
+def _is_private(ip: str) -> bool:
+    try:
+        return ip_address(ip).is_private
+    except ValueError:
+        return False
+
+
+def active_attackers(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> list[str]:
+    """Sources of unblocked detections in the window, most recent first."""
+    cutoff = time.time() - window_s
+    seen: dict[str, None] = {}
+    for t, ev in reversed(RECENT_EVENTS):
+        if t < cutoff:
+            break
+        if ev["is_threat"] and ev["src_ip"] not in BLOCKED_IPS:
+            seen.setdefault(ev["src_ip"], None)
+    return list(seen)
+
+
+def build_topology(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> dict:
+    """Nodes and edges from real recent detections. With no detections, only
+    recently seen internal hosts are returned, marked clean."""
+    cutoff = time.time() - window_s
+    recent = [ev for t, ev in RECENT_EVENTS if t >= cutoff]
+    threats = [ev for ev in recent if ev["is_threat"] and ev["src_ip"] not in BLOCKED_IPS]
+
+    pairs: dict[tuple, dict] = {}
+    for ev in threats:
+        key = (ev["src_ip"], ev["dst_ip"])
+        agg = pairs.setdefault(key, {"bytes": 0, "types": Counter(), "score": 0.0})
+        agg["bytes"] += ev["bytes"]
+        agg["types"][ev["attack_type"]] += 1
+        agg["score"] = max(agg["score"], ev["score"])
+
+    attackers = list(dict.fromkeys(src for src, _ in pairs))[:MAX_NODES_PER_GROUP]
+    victims = list(dict.fromkeys(dst for src, dst in pairs if src in attackers))[:MAX_NODES_PER_GROUP]
+    involved = set(attackers) | set(victims)
+    clean = list(dict.fromkeys(
+        ip for ev in reversed(recent) for ip in (ev["src_ip"], ev["dst_ip"])
+        if ip not in involved and _is_private(ip)
+    ))[:MAX_NODES_PER_GROUP]
+
+    nodes = (
+        [{"id": ip, "type": "attacker", "label": ip, "severity": "critical"} for ip in attackers]
+        + [{"id": ip, "type": "victim", "label": ip, "severity": "high"} for ip in victims]
+        + [{"id": ip, "type": "clean", "label": ip, "severity": "low"} for ip in clean]
+    )
+    edges = [
+        {"source": src, "target": dst, "attackType": agg["types"].most_common(1)[0][0],
+         "bandwidth": agg["bytes"]}
+        for (src, dst), agg in pairs.items() if src in attackers and dst in victims
+    ]
+    minutes = int(window_s // 60)
+    summary = (
+        f"{len(attackers)} active attacker(s) and {len(victims)} targeted host(s) from detections in the last {minutes} min."
+        if attackers else f"No active threats detected in the last {minutes} min; showing recently seen internal hosts."
+    )
+    return {"nodes": nodes, "edges": edges, "summary": summary}
+
+
 LAST_INGEST_AT: float = 0.0  # time of the last batch received from the Java ingester
 INGEST_TAKEOVER_SECONDS = 3.0
 
@@ -199,6 +267,7 @@ async def process_event(manager, raw_event: dict) -> dict:
     if raw_event["src_ip"] in BLOCKED_IPS:
         return {"blocked": True, **raw_event}
     event = detector.classify(raw_event)
+    RECENT_EVENTS.append((time.time(), event))
     await manager.broadcast({"type": "telemetry", "data": event})
 
     if event["is_threat"] and event["severity"] == "critical" and not PROACTIVE_TRIGGERED:
