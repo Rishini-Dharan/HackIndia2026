@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useWebSocketStore } from '../store/useWebSocketStore'
+import { useWebSocketStore, BACKEND_URL } from '../store/useWebSocketStore'
 import { Shield, Wifi, WifiOff, Activity, Trash2, ShieldAlert, Ban, Layers, Search, FileText, Sun, Moon } from 'lucide-react'
 
 export default function Sidebar({ theme, toggleTheme }: { theme: 'dark' | 'light'; toggleTheme: () => void }) {
   const isConnected = useWebSocketStore(s => s.isConnected)
+  const agentMode = useWebSocketStore(s => s.agentMode)
   const widgetCount = useWebSocketStore(s => s.mountedWidgets.length)
   const telemetryCount = useWebSocketStore(s => s.telemetryBuffer.length)
   const clearMessages = useWebSocketStore(s => s.clearMessages)
@@ -66,8 +67,25 @@ export default function Sidebar({ theme, toggleTheme }: { theme: 'dark' | 'light
               : <WifiOff className="w-3.5 h-3.5 text-red" />
             }
             <span className="text-xs text-text-dim font-mono">
-              {isMockMode ? 'client-side sandbox' : 'ws://localhost:8000'}
+              {isMockMode ? 'client-side sandbox' : new URL(BACKEND_URL).host}
             </span>
+          </div>
+          <div
+            className="mt-2 text-[11px] leading-snug text-text-dim"
+            title={agentMode?.reason || undefined}
+            data-testid="agent-mode"
+          >
+            <span className="font-semibold text-text-muted">Data: </span>
+            {isMockMode ? 'simulated in browser' : 'live backend stream'}
+            <br />
+            <span className="font-semibold text-text-muted">Agent: </span>
+            {agentMode?.mode === 'llm'
+              ? `LLM (${agentMode.provider})`
+              : agentMode?.mode === 'scripted'
+                ? 'scripted planner (no LLM key)'
+                : agentMode?.mode === 'sandbox'
+                  ? 'scripted, in browser'
+                  : '...'}
           </div>
         </div>
 

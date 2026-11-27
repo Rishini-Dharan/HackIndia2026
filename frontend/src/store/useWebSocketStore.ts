@@ -62,6 +62,7 @@ interface WebSocketState {
   blockedIps: Set<string>
   isSimulating: boolean
   isMockMode: boolean
+  agentMode: AgentMode | null
 
   connect: (url?: string) => void
   disconnect: () => void
@@ -72,11 +73,17 @@ interface WebSocketState {
   triggerDemoStage: (stage: string) => void
 }
 
+export interface AgentMode {
+  mode: 'llm' | 'scripted' | 'sandbox'
+  provider: string
+  reason?: string
+}
+
 // ── Constants ────────────────────────────────────────────────────
 
 const MAX_TELEMETRY_BUFFER = 120
 const MAX_RECONNECT_DELAY = 10000
-const DEFAULT_WS_URL = 'ws://localhost:8000/ws/chat'
+export const BACKEND_URL: string = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/chat'
 
 let reconnectAttempts = 0
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -246,7 +253,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
               evidence: [
                 "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
                 "Repeated connections from high-risk external subnet.",
-                "Java high-speed packet ingestion classified: threat score = 0.985."
+                "Sandbox replay: SMB bulk-transfer signature (rule:smb-bulk-transfer) on simulated events."
               ],
               layout: [
                 {
@@ -254,7 +261,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
                   component: "LiveTrafficChart",
                   props: {
                     title: "Active Traffic Spike (Port 445)",
-                    description: "Spike detected in Java ingestion packet logs"
+                    description: "SMB traffic from the flagged source"
                   },
                   mountedAt: Date.now()
                 },
@@ -332,6 +339,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     
     set({
       isMockMode: true,
+      agentMode: { mode: 'sandbox', provider: 'browser', reason: 'Backend unreachable: telemetry and agent replies are simulated in the browser.' },
       isConnected: true, // Show connected indicator for sandbox
       socket: null
     })
@@ -340,7 +348,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
       id: generateId(),
       type: 'chat',
       role: 'agent',
-      content: "🤖 **Local Sandbox Activated**\n\nI couldn't establish a connection to the Q-Guardian FastAPI backend at `ws://localhost:8000` (this usually happens if the backend is not running or when hosted statically).\n\nNo worries! I've loaded a fully interactive **client-side simulator** in your browser. \n\nYou can click **'Simulate Attack'** in the sidebar, watch telemetry stream, interact with me in chat (try asking to *'show live traffic'*, *'open triage board'*, *'show firewall rules'*), and execute the **Mitigation containment** rules!",
+      content: "🤖 **Local Sandbox Activated**\n\nI couldn't establish a connection to the Q-Guardian FastAPI backend at `" + BACKEND_URL + "` (this usually happens if the backend is not running or when hosted statically).\n\nNo worries! I've loaded a fully interactive **client-side simulator** in your browser. \n\nYou can click **'Simulate Attack'** in the sidebar, watch telemetry stream, interact with me in chat (try asking to *'show live traffic'*, *'open triage board'*, *'show firewall rules'*), and execute the **Mitigation containment** rules!",
       timestamp: Date.now()
     }
 
@@ -360,11 +368,12 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
     blockedIps: new Set<string>(),
     isSimulating: false,
     isMockMode: false,
+    agentMode: null,
 
     connect: (url?: string) => {
       if (get().isMockMode) return // Already in mock sandbox mode!
 
-      const wsUrl = url || DEFAULT_WS_URL
+      const wsUrl = url || BACKEND_URL
       const existing = get().socket
       if (existing && existing.readyState === WebSocket.OPEN) return
 
@@ -387,6 +396,11 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
             const state = get()
 
             switch (data.type) {
+              case 'agent_mode': {
+                set({ agentMode: { mode: data.mode, provider: data.provider, reason: data.reason } })
+                break
+              }
+
               case 'chat': {
                 const msg: ChatMessage = {
                   id: generateId(),
@@ -1026,7 +1040,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
             evidence: [
               "Unusually high bytes transfer (65,535 bytes) on SMB port 445.",
               "Repeated connections from high-risk external subnet.",
-              "Java high-speed packet ingestion classified: threat score = 0.985."
+              "Sandbox replay: SMB bulk-transfer signature (rule:smb-bulk-transfer) on simulated events."
             ],
             layout: [
               {
@@ -1034,7 +1048,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
                 component: "LiveTrafficChart",
                 props: {
                   title: "Active Traffic Spike (Port 445)",
-                  description: "Spike detected in Java ingestion packet logs"
+                  description: "SMB traffic from the flagged source"
                 },
                 mountedAt: Date.now()
               },
