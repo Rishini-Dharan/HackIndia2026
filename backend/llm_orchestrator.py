@@ -821,6 +821,18 @@ async def _ollama_route(user_text: str) -> list[dict]:
         raise RuntimeError(f"Ollama unavailable at {OLLAMA_BASE_URL}: {e}") from e
 
 
+def _describe_error(e: Exception) -> str:
+    """Short, secret-free reason for /health: HTTP status plus the provider's error code."""
+    if isinstance(e, httpx.HTTPStatusError):
+        code = ""
+        try:
+            code = e.response.json().get("error", {}).get("code", "")
+        except Exception:
+            pass
+        return f"HTTP {e.response.status_code}{f' {code}' if code else ''} (model {GROQ_MODEL if LLM_PROVIDER == 'groq' else OPENAI_MODEL})"
+    return type(e).__name__
+
+
 async def plan_investigation(user_text: str) -> list[dict]:
     """
     Main entry point. Routes the message through the configured LLM provider.
@@ -844,5 +856,5 @@ async def plan_investigation(user_text: str) -> list[dict]:
         return result
     except Exception as e:
         print(f"[LLM] {provider} error: {e}. Falling back to scripted planner.")
-        _set_mode("scripted", "mock", f"{provider} request failed: {type(e).__name__}")
+        _set_mode("scripted", "mock", f"{provider} request failed: {_describe_error(e)}")
         return await _mock_route(user_text)
