@@ -1,0 +1,16 @@
+# Render blueprint for the backend (free web service).
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repo, then set GROQ_API_KEY.
+# Afterwards set the GitHub repository variable VITE_WS_URL=wss://<service>.onrender.com/ws/chat
+# and re-run the Pages deploy so the live demo talks to the real backend.
+services:
+  - type: web
+    name: qguardian-os-backend
+    runtime: docker
+    rootDir: backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://rishini-dharan.github.io
