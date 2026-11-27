@@ -6,5 +6,5 @@ COPY TelemetryIngestion.java .
 
 RUN javac TelemetryIngestion.java
 
-# Default: simulate 1000 packets for demo
-CMD ["java", "TelemetryIngestion", "--simulate", "1000"]
+# Default: stream to a local backend
+CMD ["java", "TelemetryIngestion", "--emit", "http://backend:8000/ingest"]
