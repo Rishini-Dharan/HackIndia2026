@@ -1,0 +1,311 @@
+{
+  "summary": {
+    "mode": "llm",
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b",
+    "fallback_cases": 0,
+    "valid": true,
+    "cases": 20,
+    "passed": 16,
+    "accuracy": 0.8,
+    "median_latency_s": 1.55
+  },
+  "cases": [
+    {
+      "prompt": "hi there",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 2.3,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "what can you do?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.55,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "who built you and how do you work?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 2.96,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "thanks, that's all for now",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.01,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "show me live network traffic",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 1.12,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "is there a bandwidth spike right now? plot the traffic",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 0.96,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "map the blast radius of the attack",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.26,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "which hosts are talking to the attacker? show the topology",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 4.84,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "open the incident triage board",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 1.36,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "list the active incidents by severity",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": false,
+      "latency_s": 2.54,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "block 45.33.12.99 immediately",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.22,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "isolate the compromised host",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [],
+      "pass": false,
+      "latency_s": 0.94,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "rate-limit the suspicious IPs for 24 hours",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.08,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "show the current firewall rules as a table",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 2.48,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "give me CPU and memory load metrics for the servers",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 1.56,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "write an incident report for INV-412",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 4.87,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "show live traffic and the threat topology side by side",
+      "expect": [
+        "LiveTrafficChart",
+        "ThreatTopology"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": false,
+      "latency_s": 1.33,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "triage the incidents and prepare containment for the worst one",
+      "expect": [
+        "IncidentTriageBoard",
+        "MitigationAction"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": false,
+      "latency_s": 1.4,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "what is SMB and why is port 445 risky?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 2.07,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "explain the difference between a DDoS and a port scan",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 2.17,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    }
+  ]
+}

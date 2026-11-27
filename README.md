@@ -17,7 +17,7 @@ A Java service parses packet telemetry and streams it to a FastAPI hub. A detect
 |---|---|
 | Java ingestion | Real. It parses `ts\|src\|dst\|proto\|port\|bytes\|flags` with a single `charAt` pass and POSTs batches to `/ingest`. The traffic it sends is generated; there is no packet capture. |
 | Detector | Real model. Multinomial logistic regression trained on NSL-KDD and evaluated on the held-out `KDDTest+` set (numbers below). Ransomware is a **signature rule** (SMB bulk transfer from an external IP), because NSL-KDD has no ransomware class. Each detection is tagged with its closest MITRE ATT&CK technique: a port scan maps to T1046 Network Service Discovery, the SMB rule to T1486 Data Encrypted for Impact. |
-| Planner | Real LLM (Groq `llama-3.3-70b-versatile` or OpenAI) when a key is set. Without one, a scripted keyword planner answers. The sidebar always shows which one answered, and a failed LLM call never falls back silently. |
+| Planner | Real LLM (Groq `openai/gpt-oss-120b` or OpenAI) when a key is set. Without one, a scripted keyword planner answers. The sidebar always shows which one answered, and a failed LLM call never falls back silently. |
 | Memory | Qdrant Cloud, or an on-disk local store (`backend/.qdrant`) that survives restarts. Every opened and contained case is saved as a full workspace snapshot; asking the agent to *continue* or *resume* reopens the latest one. Embeddings come from Gemini, or from a deterministic hash when no key is set. |
 | Hosted demo | **Browser sandbox.** GitHub Pages has no backend, so the demo replays scripted telemetry and agent replies in the browser and labels itself that way. Run locally (below) for the real pipeline. |
 
@@ -38,10 +38,12 @@ The model only uses features the runtime can compute from a sliding window (byte
 
 **Planner eval** (`backend/eval`, 20 requests, pass means the exact set of widgets mounted):
 
-| Planner | Accuracy |
-|---|---|
-| Scripted keyword planner | 16/20 (fails multi-widget and paraphrased requests) |
-| Groq Llama 3.3 70B | run `python eval/run_eval.py` with `GROQ_API_KEY` set |
+| Planner | Accuracy | Misses |
+|---|---|---|
+| Scripted keyword planner | 16/20 | paraphrases ("rate-limit the IPs"), reports, both two-widget requests |
+| `openai/gpt-oss-120b` on Groq | 16/20 (two runs, 0 fallbacks) | both two-widget requests (makes one tool call), "list incidents by severity" (picks a generic table), one malformed tool-call JSON |
+
+The model handles paraphrases and reports the keyword planner can't, but neither composes two widgets from one request yet, which is the next thing to fix. Free Groq tiers cap tokens per minute, so run the eval with `--delay 10`; the summary marks a run invalid if any case fell back to the scripted planner.
 
 ## Architecture
 
