@@ -1,6 +1,6 @@
 """
 Q-Guardian OS — FastAPI WebSocket Backend
-Main application entry point.
+Entry point: WebSocket chat, /ingest for the Java ingester, and /health.
 """
 
 import asyncio
