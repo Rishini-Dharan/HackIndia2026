@@ -5,9 +5,9 @@
 [![CI](https://github.com/Rishini-Dharan/HackIndia2026/actions/workflows/ci.yml/badge.svg)](https://github.com/Rishini-Dharan/HackIndia2026/actions/workflows/ci.yml)
 · [Live demo](https://rishini-dharan.github.io/HackIndia2026/) · Built for HackIndia Spark-9 2026, Track 04 (stateful AI agents with dynamic UI)
 
-![Real pipeline: Java ingester streams traffic, an SMB attack is detected and tagged T1486, the analyst blocks it](docs/images/demo.gif)
+![Live demo: replayed UNSW-NB15 traffic, a two-widget answer from gpt-oss-120b, a port scan detected and tagged T1046, then blocked](docs/images/demo.gif)
 
-*Recorded on the real pipeline (Java ingester → `/ingest` → detector → WebSocket), not the browser sandbox.*
+*Recorded on the live site (GitHub Pages → Render backend), not the browser sandbox. Traffic is replayed from UNSW-NB15's held-out test set. The agent builds two widgets from one request, and the map shows no attackers while traffic is normal. Simulate Attack replays one attack family: the gradient-boosted detector opens a PortScan case tagged MITRE T1046, and blocking the source neutralizes it.*
 
 A Java service parses packet telemetry and streams it to a FastAPI hub. A detector trained on NSL-KDD scores each event. When something critical shows up, the backend opens an investigation workspace, and an LLM planner decides which widgets the analyst needs next: traffic, blast-radius graph, triage board, containment controls, or a generated report. The planner emits validated JSON, and a fixed component registry renders it, so the model never writes UI code.
 
