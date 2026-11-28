@@ -27,6 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ws_handler import ConnectionManager, handle_ws_message
 import anomaly_simulator as sim
 import session
+import qdrant_memory
 import llm_orchestrator
 
 
@@ -83,6 +84,7 @@ async def health():
         "service": "Q-Guardian OS",
         "connections": len(manager.active_connections),
         "sessions": len(manager.connected_client_ids()),
+        "memory_store": qdrant_memory.STORE,
         "planner": llm_orchestrator.LAST_MODE,
         "telemetry_source": "java-ingest" if time.time() - sim.LAST_INGEST_AT < sim.INGEST_TAKEOVER_SECONDS else "simulator",
     }

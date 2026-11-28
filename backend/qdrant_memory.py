@@ -36,10 +36,13 @@ else:
     print("[QDRANT] No embedding key found. Using deterministic local hashing (384 dimensions).")
     EMBEDDING_DIM = 384
 
-COLLECTION_NAME = "qguardian_memory"
+# The vector size is part of the name, so switching embedding providers (384-d
+# hashing vs 3072-d Gemini) never collides with an existing collection.
+COLLECTION_NAME = f"qguardian_memory_{EMBEDDING_DIM}"
 
 # Setup Qdrant Client with fallback
 qdrant_client = None
+STORE = "in-memory"  # reported by /health: qdrant-cloud, local-disk or in-memory
 if QDRANT_URL and QDRANT_API_KEY:
     try:
         print(f"[QDRANT] Attempting connection to remote instance: {QDRANT_URL}")
@@ -47,9 +50,10 @@ if QDRANT_URL and QDRANT_API_KEY:
         # Ping the collections to test connection
         client_candidate.get_collections()
         qdrant_client = client_candidate
+        STORE = "qdrant-cloud"
         print("[QDRANT] Connected to Qdrant Cloud cluster successfully.")
     except Exception as e:
-        print(f"[QDRANT] Remote connection failed: {e}. Falling back to local in-memory instance.")
+        print(f"[QDRANT] Remote connection failed: {type(e).__name__}. Falling back to a local store.")
 
 if qdrant_client is None:
     # On-disk local store so saved investigations survive a backend restart.
@@ -57,6 +61,7 @@ if qdrant_client is None:
     local_path = os.getenv("QDRANT_PATH", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".qdrant"))
     print(f"[QDRANT] Using local Qdrant store at {local_path}")
     qdrant_client = QdrantClient(":memory:") if local_path == ":memory:" else QdrantClient(path=local_path)
+    STORE = "in-memory" if local_path == ":memory:" else "local-disk"
 
 import atexit
 
@@ -75,6 +80,12 @@ try:
         print(f"[QDRANT] Collection '{COLLECTION_NAME}' created with size {EMBEDDING_DIM}")
     else:
         print(f"[QDRANT] Collection '{COLLECTION_NAME}' already exists.")
+    # Filtered queries (per-visitor memory, investigations) need payload indexes
+    # on Qdrant Cloud clusters running in strict mode. Creating one twice is a no-op.
+    from qdrant_client.models import PayloadSchemaType
+    for field_name in ("client_id", "category"):
+        qdrant_client.create_payload_index(COLLECTION_NAME, field_name=field_name,
+                                           field_schema=PayloadSchemaType.KEYWORD)
 except Exception as e:
     print(f"[QDRANT] Warning initializing collection: {e}")
 

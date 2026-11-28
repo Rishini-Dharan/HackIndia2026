@@ -15,5 +15,11 @@ services:
       # Shared secret the Java ingester must send as X-Ingest-Token.
       - key: QG_INGEST_TOKEN
         generateValue: true
+      # Qdrant Cloud keeps saved cases across deploys; Render's disk is wiped on
+      # every deploy. Without these, memory lives only until the next restart.
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
       - key: CORS_ORIGINS
         value: https://rishini-dharan.github.io
