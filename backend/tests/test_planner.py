@@ -85,3 +85,34 @@ def test_tool_schema_is_a_widget_list():
     params = llm.RENDER_WIDGET_TOOL["function"]["parameters"]
     assert llm.RENDER_WIDGET_TOOL["function"]["name"] == "render_security_widgets"
     assert params["properties"]["widgets"]["maxItems"] == 4
+
+
+def test_global_llm_budget_falls_back_visibly(monkeypatch):
+    calls = []
+
+    async def fake_groq(text):
+        calls.append(text)
+        return [{"type": "chat", "role": "agent", "content": "llm"}]
+
+    monkeypatch.setattr(llm, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(llm, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_groq_route", fake_groq)
+    monkeypatch.setattr(llm, "GLOBAL_LLM_CALLS_PER_MINUTE", 3)
+    llm._llm_call_times.clear()
+    for _ in range(3):
+        asyncio.run(llm.plan_investigation("hello"))
+        assert llm.LAST_MODE["mode"] == "llm"
+    asyncio.run(llm.plan_investigation("hello"))
+    assert len(calls) == 3
+    assert llm.LAST_MODE["mode"] == "scripted"
+    assert "budget" in llm.LAST_MODE["reason"]
+    llm._llm_call_times.clear()
+
+
+def test_budget_window_slides():
+    llm._llm_call_times.clear()
+    for i in range(llm.GLOBAL_LLM_CALLS_PER_MINUTE):
+        assert llm._llm_budget_available(now=1000.0 + i * 0.01)
+    assert not llm._llm_budget_available(now=1001.0)
+    assert llm._llm_budget_available(now=1061.0)  # oldest calls aged out
+    llm._llm_call_times.clear()

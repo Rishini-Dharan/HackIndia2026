@@ -41,6 +41,7 @@ class Session:
     recent_events: deque = field(default_factory=lambda: deque(maxlen=1000))
     detector: MLAnomalyDetector = field(default_factory=MLAnomalyDetector)
     last_seen: float = field(default_factory=time.time)
+    chat_times: deque = field(default_factory=deque)  # recent chat messages, for rate limiting
 
 
 SESSIONS: dict[str, Session] = {}
@@ -79,6 +80,20 @@ def use_session(sess: Session):
         yield sess
     finally:
         _current.reset(token)
+
+
+CHATS_PER_MINUTE = 10
+
+
+def allow_chat(sess: "Session", now: float | None = None) -> bool:
+    """Per-visitor limit on chat messages that reach the planner."""
+    now = time.time() if now is None else now
+    while sess.chat_times and now - sess.chat_times[0] > 60:
+        sess.chat_times.popleft()
+    if len(sess.chat_times) >= CHATS_PER_MINUTE:
+        return False
+    sess.chat_times.append(now)
+    return True
 
 
 def evict_idle(connected_client_ids: set[str]):
