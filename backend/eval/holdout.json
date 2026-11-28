@@ -1,0 +1,14 @@
+[
+  {"prompt": "good morning", "expect": []},
+  {"prompt": "how does ransomware usually spread inside a network?", "expect": []},
+  {"prompt": "graph the packets per second we're seeing right now", "expect": ["LiveTrafficChart"]},
+  {"prompt": "who is attacking which servers? draw it", "expect": ["ThreatTopology"]},
+  {"prompt": "what incidents are open right now?", "expect": ["IncidentTriageBoard"]},
+  {"prompt": "quarantine 203.0.113.50", "expect": ["MitigationAction"]},
+  {"prompt": "give me a summary report of today's incidents for my manager", "expect": ["DynamicDashboard"]},
+  {"prompt": "show me a table of the top talkers on the network", "expect": ["DynamicDashboard"]},
+  {"prompt": "plot traffic, and also show me the containment controls", "expect": ["LiveTrafficChart", "MitigationAction"]},
+  {"prompt": "map the attackers and list the open incidents", "expect": ["ThreatTopology", "IncidentTriageBoard"]},
+  {"prompt": "I need the traffic graph, the attack map and the block controls", "expect": ["LiveTrafficChart", "ThreatTopology", "MitigationAction"]},
+  {"prompt": "thanks, that's helpful", "expect": []}
+]

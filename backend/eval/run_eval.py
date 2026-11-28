@@ -43,8 +43,8 @@ async def plan_with_retry(prompt: str, retries: int):
     return msgs, latency
 
 
-async def run(delay: float, retries: int):
-    cases = json.loads((HERE / "cases.json").read_text())
+async def run(delay: float, retries: int, case_file: str):
+    cases = json.loads((HERE / case_file).read_text())
     rows, passed = [], 0
     for i, case in enumerate(cases):
         if i and delay:
@@ -70,7 +70,8 @@ async def run(delay: float, retries: int):
         "accuracy": round(passed / len(cases), 3),
         "median_latency_s": sorted(r["latency_s"] for r in rows)[len(rows) // 2],
     }
-    out = HERE / f"results-{mode['mode']}-{mode['provider']}.json"
+    suffix = "" if case_file == "cases.json" else "-" + Path(case_file).stem
+    out = HERE / f"results-{mode['mode']}-{mode['provider']}{suffix}.json"
     out.write_text(json.dumps({"summary": summary, "cases": rows}, indent=2))
     print(json.dumps(summary, indent=2))
 
@@ -79,5 +80,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--delay", type=float, default=0.0, help="seconds between cases (free tiers: ~10)")
     ap.add_argument("--retries", type=int, default=3)
+    ap.add_argument("--cases", default="cases.json", help="cases.json (tuned on) or holdout.json (never tuned on)")
     a = ap.parse_args()
-    asyncio.run(run(a.delay, a.retries))
+    asyncio.run(run(a.delay, a.retries, a.cases))

@@ -6,9 +6,9 @@
     "fallback_cases": 0,
     "valid": true,
     "cases": 20,
-    "passed": 16,
-    "accuracy": 0.8,
-    "median_latency_s": 1.55
+    "passed": 20,
+    "accuracy": 1.0,
+    "median_latency_s": 1.38
   },
   "cases": [
     {
@@ -16,7 +16,7 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 2.3,
+      "latency_s": 1.94,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -28,7 +28,7 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 1.55,
+      "latency_s": 1.26,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -40,7 +40,7 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 2.96,
+      "latency_s": 1.61,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -52,7 +52,7 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 1.01,
+      "latency_s": 0.98,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -68,7 +68,7 @@
         "LiveTrafficChart"
       ],
       "pass": true,
-      "latency_s": 1.12,
+      "latency_s": 0.92,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -100,7 +100,7 @@
         "ThreatTopology"
       ],
       "pass": true,
-      "latency_s": 1.26,
+      "latency_s": 1.04,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -116,7 +116,7 @@
         "ThreatTopology"
       ],
       "pass": true,
-      "latency_s": 4.84,
+      "latency_s": 0.87,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -132,7 +132,7 @@
         "IncidentTriageBoard"
       ],
       "pass": true,
-      "latency_s": 1.36,
+      "latency_s": 0.89,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -145,10 +145,10 @@
         "IncidentTriageBoard"
       ],
       "got": [
-        "DynamicDashboard"
+        "IncidentTriageBoard"
       ],
-      "pass": false,
-      "latency_s": 2.54,
+      "pass": true,
+      "latency_s": 1.33,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -164,7 +164,7 @@
         "MitigationAction"
       ],
       "pass": true,
-      "latency_s": 1.22,
+      "latency_s": 1.38,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -176,9 +176,11 @@
       "expect": [
         "MitigationAction"
       ],
-      "got": [],
-      "pass": false,
-      "latency_s": 0.94,
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.65,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -194,7 +196,7 @@
         "MitigationAction"
       ],
       "pass": true,
-      "latency_s": 1.08,
+      "latency_s": 1.91,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -210,7 +212,7 @@
         "DynamicDashboard"
       ],
       "pass": true,
-      "latency_s": 2.48,
+      "latency_s": 2.29,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -226,7 +228,7 @@
         "DynamicDashboard"
       ],
       "pass": true,
-      "latency_s": 1.56,
+      "latency_s": 1.63,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -242,7 +244,7 @@
         "DynamicDashboard"
       ],
       "pass": true,
-      "latency_s": 4.87,
+      "latency_s": 3.74,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -256,10 +258,11 @@
         "ThreatTopology"
       ],
       "got": [
-        "LiveTrafficChart"
+        "LiveTrafficChart",
+        "ThreatTopology"
       ],
-      "pass": false,
-      "latency_s": 1.33,
+      "pass": true,
+      "latency_s": 1.07,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -273,10 +276,11 @@
         "MitigationAction"
       ],
       "got": [
-        "IncidentTriageBoard"
+        "IncidentTriageBoard",
+        "MitigationAction"
       ],
-      "pass": false,
-      "latency_s": 1.4,
+      "pass": true,
+      "latency_s": 1.34,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -288,7 +292,7 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 2.07,
+      "latency_s": 2.79,
       "mode": {
         "mode": "llm",
         "provider": "groq",
@@ -300,7 +304,7 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 2.17,
+      "latency_s": 2.04,
       "mode": {
         "mode": "llm",
         "provider": "groq",

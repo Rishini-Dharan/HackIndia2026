@@ -1,0 +1,203 @@
+{
+  "summary": {
+    "mode": "llm",
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b",
+    "fallback_cases": 0,
+    "valid": true,
+    "cases": 12,
+    "passed": 12,
+    "accuracy": 1.0,
+    "median_latency_s": 1.37
+  },
+  "cases": [
+    {
+      "prompt": "good morning",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.96,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "how does ransomware usually spread inside a network?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 2.72,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "graph the packets per second we're seeing right now",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 1.37,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "who is attacking which servers? draw it",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 0.96,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "what incidents are open right now?",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 0.84,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "quarantine 203.0.113.50",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.26,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "give me a summary report of today's incidents for my manager",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 2.79,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "show me a table of the top talkers on the network",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 1.9,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "plot traffic, and also show me the containment controls",
+      "expect": [
+        "LiveTrafficChart",
+        "MitigationAction"
+      ],
+      "got": [
+        "LiveTrafficChart",
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.55,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "map the attackers and list the open incidents",
+      "expect": [
+        "ThreatTopology",
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard",
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.21,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "I need the traffic graph, the attack map and the block controls",
+      "expect": [
+        "LiveTrafficChart",
+        "ThreatTopology",
+        "MitigationAction"
+      ],
+      "got": [
+        "LiveTrafficChart",
+        "MitigationAction",
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.3,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    },
+    {
+      "prompt": "thanks, that's helpful",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.14,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": ""
+      }
+    }
+  ]
+}

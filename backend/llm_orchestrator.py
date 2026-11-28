@@ -57,42 +57,61 @@ class WidgetCall(BaseModel):
     props: dict[str, Any] = Field(default_factory=dict)
 
 
+class WidgetBatch(BaseModel):
+    widgets: list[WidgetCall] = Field(min_length=1, max_length=4)
+
+
 def parse_widget_call(raw_arguments: str) -> WidgetCall:
-    """Validate a render_security_widget tool call. Raises ValueError on bad output."""
+    """Validate a single-widget tool call. Raises ValueError on bad output."""
     try:
         return WidgetCall.model_validate(json.loads(raw_arguments))
     except (json.JSONDecodeError, ValidationError) as e:
         raise ValueError(f"invalid widget call: {e}") from e
 
 
-# ── Tool Definition (shared across providers) ───────────────────
+def parse_widget_batch(raw_arguments: str) -> list[WidgetCall]:
+    """Validate a render_security_widgets call: {"widgets": [...]}, or a bare
+    single widget for older prompts. Raises ValueError on bad output."""
+    try:
+        data = json.loads(raw_arguments)
+        if isinstance(data, dict) and "widgets" in data:
+            return WidgetBatch.model_validate(data).widgets
+        return [WidgetCall.model_validate(data)]
+    except (json.JSONDecodeError, ValidationError) as e:
+        raise ValueError(f"invalid widget call: {e}") from e
+
+
+_WIDGET_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "component": {
+            "type": "string",
+            "enum": ["LiveTrafficChart", "ThreatTopology", "MitigationAction", "IncidentTriageBoard", "DynamicDashboard"],
+            "description": "The widget component to mount.",
+        },
+        "title": {"type": "string", "description": "Display title for the widget."},
+        "description": {"type": "string", "description": "Brief description of what this widget shows."},
+        "props": {
+            "type": "object",
+            "description": "Component-specific props. For DynamicDashboard, structure props as: { 'layoutType': 'table'|'cards'|'form'|'document', 'data': [...] or 'config': {...} }",
+        },
+    },
+    "required": ["component", "title"],
+}
+
+# One call carries every widget a request needs. With one widget per call, models
+# reliably made a single call and dropped the second view of a two-part request.
 RENDER_WIDGET_TOOL = {
     "type": "function",
     "function": {
-        "name": "render_security_widget",
-        "description": "Mount an interactive security widget in the user's chat canvas. Use this for traffic, topology, mitigation, active incidents, OR to render custom layouts/tables/resumes dynamically using DynamicDashboard.",
+        "name": "render_security_widgets",
+        "description": "Mount one or more interactive security widgets in the user's canvas, in order. Include EVERY widget the request needs in this single call (for example traffic and topology together).",
         "parameters": {
             "type": "object",
             "properties": {
-                "component": {
-                    "type": "string",
-                    "enum": ["LiveTrafficChart", "ThreatTopology", "MitigationAction", "IncidentTriageBoard", "DynamicDashboard"],
-                    "description": "The widget component to mount.",
-                },
-                "title": {
-                    "type": "string",
-                    "description": "Display title for the widget.",
-                },
-                "description": {
-                    "type": "string",
-                    "description": "Brief description of what this widget shows.",
-                },
-                "props": {
-                    "type": "object",
-                    "description": "Component-specific props. For DynamicDashboard, structure props as: { 'layoutType': 'table'|'cards'|'form'|'document', 'data': [...] or 'config': {...} }",
-                },
+                "widgets": {"type": "array", "minItems": 1, "maxItems": 4, "items": _WIDGET_SCHEMA},
             },
-            "required": ["component", "title"],
+            "required": ["widgets"],
         },
     },
 }
@@ -104,12 +123,12 @@ You are a conversational AI — NOT a static dashboard generator. You must behav
 ## CRITICAL RULES FOR CONVERSATION:
 1. For greetings (hi, hello, hey, etc.), casual questions, or general conversation — respond NATURALLY and conversationally. Do NOT mount any widgets. Just talk like a helpful AI assistant.
 2. If the user asks who you are, what you can do, or about your capabilities — explain yourself naturally in your own words. You are Q-Guardian OS, an adaptive AI investigation operating system that dynamically composes security workspaces in real-time.
-3. Only use the render_security_widget tool when the user EXPLICITLY asks for security operations like monitoring traffic, analyzing threats, viewing incidents, or taking mitigation actions.
+3. Only use the render_security_widgets tool when the user EXPLICITLY asks for security operations like monitoring traffic, analyzing threats, viewing incidents, or taking mitigation actions.
 4. When using the tool, you may include a brief natural language message alongside it to explain what you're doing.
-5. Call render_security_widget once per widget. If a request needs several views (for example traffic AND topology, or triage AND containment), make one call for each in the same turn.
+5. Make ONE render_security_widgets call per turn and list every widget the request needs in `widgets`. A request for two views (for example 'traffic and topology', or 'triage and then containment') needs two entries. Incident lists and severity rankings belong in IncidentTriageBoard.
 6. Written deliverables (incident reports, summaries for management) go in a DynamicDashboard with layoutType 'document', not in plain chat text.
 
-## WHEN TO USE render_security_widget:
+## WHEN TO USE render_security_widgets:
 - Live traffic monitoring or network data → mount LiveTrafficChart
 - Threat analysis, topology, blast radius, or attack mapping → mount ThreatTopology
 - Summaries of active threats, triage, or incident boards → mount IncidentTriageBoard
@@ -655,6 +674,32 @@ async def _mock_route(user_text: str) -> list[dict]:
 
 # ── OpenAI Mode ──────────────────────────────────────────────────
 
+def _widget_message(args: dict, user_text: str) -> dict:
+    """A validated widget call turned into a mount message with live data filled in."""
+    widget_msg = {
+        "type": "widget",
+        "action": "mount",
+        "component": args["component"],
+        "id": f"{args['component'].lower()}-{random.randint(1000,9999)}",
+        "props": {
+            "title": args.get("title", args["component"]),
+            "description": args.get("description", ""),
+            **(args.get("props", {})),
+        },
+    }
+    # Topology always comes from real detections; nodes the model
+    # proposes are discarded so it can't invent attackers.
+    if args["component"] == "ThreatTopology":
+        topo = _live_topology()
+        widget_msg["props"]["nodes"] = topo["nodes"]
+        widget_msg["props"]["edges"] = topo["edges"]
+        widget_msg["props"]["description"] = topo["summary"]
+    # Containment targets: IPs the operator named, else active attackers.
+    if args["component"] == "MitigationAction":
+        widget_msg["props"]["threatIps"] = _live_threat_ips(user_text, widget_msg["props"].get("threatIps"))
+    return widget_msg
+
+
 async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str, model: str) -> list[dict]:
     """
     Generic route for any OpenAI-compatible API (OpenAI, Groq, Together, etc.).
@@ -704,40 +749,17 @@ async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str
     # Check for tool calls
     if message.get("tool_calls"):
         for tc in message["tool_calls"]:
-            if tc["function"]["name"] == "render_security_widget":
-                try:
-                    args = parse_widget_call(tc["function"]["arguments"]).model_dump()
-                except ValueError as e:
-                    print(f"[LLM] Rejected tool call: {e}")
-                    results.append({"type": "chat", "role": "agent",
-                                    "content": "The planner proposed a widget that failed schema validation, so I skipped it."})
-                    continue
-                widget_msg = {
-                    "type": "widget",
-                    "action": "mount",
-                    "component": args["component"],
-                    "id": f"{args['component'].lower()}-{random.randint(1000,9999)}",
-                    "props": {
-                        "title": args.get("title", args["component"]),
-                        "description": args.get("description", ""),
-                        **(args.get("props", {})),
-                    },
-                }
-
-                # Topology always comes from real detections; nodes the model
-                # proposes are discarded so it can't invent attackers.
-                if args["component"] == "ThreatTopology":
-                    topo = _live_topology()
-                    widget_msg["props"]["nodes"] = topo["nodes"]
-                    widget_msg["props"]["edges"] = topo["edges"]
-                    widget_msg["props"]["description"] = topo["summary"]
-
-                # Containment targets: IPs the operator named, else active attackers.
-                if args["component"] == "MitigationAction":
-                    widget_msg["props"]["threatIps"] = _live_threat_ips(
-                        user_text, widget_msg["props"].get("threatIps"))
-
-                results.append(widget_msg)
+            if tc["function"]["name"] not in ("render_security_widgets", "render_security_widget"):
+                continue
+            try:
+                calls = parse_widget_batch(tc["function"]["arguments"])
+            except ValueError as e:
+                print(f"[LLM] Rejected tool call: {e}")
+                results.append({"type": "chat", "role": "agent",
+                                "content": "The planner proposed a widget that failed schema validation, so I skipped it."})
+                continue
+            for call in calls:
+                results.append(_widget_message(call.model_dump(), user_text))
 
     # Also include text content if present
     if message.get("content"):
