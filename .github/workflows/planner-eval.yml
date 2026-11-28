@@ -24,8 +24,8 @@ jobs:
       GROQ_FALLBACK_MODEL: ""  # score the primary model alone
       QDRANT_PATH: ":memory:"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -39,7 +39,7 @@ jobs:
         run: python eval/run_eval.py --delay 10 --cases holdout.json
       - name: Pass/fail
         run: python eval/check_results.py results-gpt-oss-120b.json:17 results-gpt-oss-120b-holdout.json:10
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: planner-eval-results
