@@ -25,6 +25,7 @@ from pathlib import Path
 import numpy as np
 
 MODEL_PATH = Path(__file__).resolve().parent / "ml" / "model.json"
+UNSW_MODEL_PATH = Path(__file__).resolve().parent / "ml" / "unsw_gbm.json"
 
 # Model category -> attack label shown in the UI
 CATEGORY_LABEL = {"dos": "DDoS", "probe": "PortScan", "r2l": "Intrusion", "u2r": "PrivilegeEscalation"}
@@ -48,9 +49,74 @@ MITRE_ATTACK = {
     "BruteForce": ("T1110", "Brute Force", "Credential Access"),
     "Intrusion": ("T1190", "Exploit Public-Facing Application", "Initial Access"),
     "PrivilegeEscalation": ("T1068", "Exploitation for Privilege Escalation", "Privilege Escalation"),
+    # UNSW-NB15 families with a clear technique; Generic, Backdoor, Shellcode and
+    # Analysis are too broad to map honestly, so they carry no tag.
+    "Exploit": ("T1190", "Exploit Public-Facing Application", "Initial Access"),
+    "Fuzzing": ("T1595", "Active Scanning", "Reconnaissance"),
+    "Worm": ("T1210", "Exploitation of Remote Services", "Lateral Movement"),
 }
 SMB_BULK_BYTES = 20_000          # rule: SMB transfer larger than this from an external IP
 RULE_SCORE = 0.97                # confidence assigned to signature hits (critical severity)
+
+
+class GBMModel:
+    """Gradient-boosted trees exported by ml/train_unsw_live.py, evaluated with NumPy."""
+
+    def __init__(self, spec: dict):
+        self.classes = spec["classes"]
+        self.baseline = np.array(spec["baseline"], dtype=float)
+        self.trees = spec["trees"]
+
+    def raw(self, x: np.ndarray) -> np.ndarray:
+        out = self.baseline.copy()
+        for k, trees in enumerate(self.trees):
+            for tree in trees:
+                node = 0
+                f, t, left, right, missing, leaf = tree["f"], tree["t"], tree["l"], tree["r"], tree["m"], tree["leaf"]
+                while not leaf[node]:
+                    val = x[f[node]]
+                    go_left = missing[node] if val != val else val <= t[node]  # val != val: NaN
+                    node = left[node] if go_left else right[node]
+                out[k] += tree["v"][node]
+        return out
+
+
+_UNSW = None
+
+
+def unsw_models():
+    """Loaded once per process and shared by every visitor's detector."""
+    global _UNSW
+    if _UNSW is None and UNSW_MODEL_PATH.exists():
+        spec = json.loads(UNSW_MODEL_PATH.read_text())
+        _UNSW = {"features": spec["features"], "labels": spec["labels"],
+                 "attack": GBMModel(spec["attack"]), "family": GBMModel(spec["family"])}
+    return _UNSW
+
+
+HTTP_SERVICES, SSH_SERVICES, DNS_SERVICES = {"http", "ssl"}, {"ssh"}, {"dns"}
+
+
+def flow_features(flow: dict, features: list[str]) -> np.ndarray:
+    """The 11 window features from sensor-computed flow fields (mirrors
+    train.featurize_unsw, without pandas)."""
+    count = max(1.0, float(flow["ct_src_ltm"]))
+    same = min(1.0, max(0.0, float(flow["ct_src_dport_ltm"]) / count))
+    proto, svc = str(flow["proto"]).lower(), str(flow["service"]).lower()
+    values = {
+        "log_bytes": math.log1p(min(float(flow["sbytes"]), 10_000_000)),
+        "log_count": math.log1p(float(flow["ct_src_ltm"])),
+        "diff_srv_rate": 1.0 - same,
+        "same_srv_rate": same,
+        "proto_tcp": float(proto == "tcp"),
+        "proto_udp": float(proto == "udp"),
+        "proto_icmp": float(proto == "icmp"),
+        "svc_http": float(svc in HTTP_SERVICES),
+        "svc_ssh": float(svc in SSH_SERVICES),
+        "svc_smb": 0.0,
+        "svc_dns": float(svc in DNS_SERVICES),
+    }
+    return np.array([values[name] for name in features])
 
 
 def _utc_now() -> str:
@@ -132,15 +198,25 @@ class MLAnomalyDetector:
         src, port, nbytes = event["src_ip"], int(event["port"]), int(event["bytes"])
         self._update(src, port, now)
 
-        proba = self.predict_proba(self.features_for(event))
-        p_attack = float(1.0 - proba[self.classes.index("normal")])
-        top = self.classes[int(proba.argmax())]
-
-        attack_type, detector, score = None, "model:nsl-kdd-lr", p_attack
+        models = unsw_models() if event.get("flow") else None
+        if models:
+            # Sensor-computed flow features (replayed UNSW-NB15 flows): gradient boosting.
+            x = flow_features(event["flow"], models["features"])
+            p_attack = float(1.0 / (1.0 + math.exp(-models["attack"].raw(x)[0])))
+            attack_type, detector, score = None, "model:unsw-nb15-gbm", p_attack
+            if p_attack >= THREAT_THRESHOLD:
+                family = models["family"].classes[int(models["family"].raw(x).argmax())]
+                attack_type = models["labels"].get(family, "Anomaly")
+            top = None
+        else:
+            proba = self.predict_proba(self.features_for(event))
+            p_attack = float(1.0 - proba[self.classes.index("normal")])
+            top = self.classes[int(proba.argmax())]
+            attack_type, detector, score = None, "model:nsl-kdd-lr", p_attack
         if port in SMB_PORTS and nbytes > SMB_BULK_BYTES and _is_external(src):
             attack_type, detector = "Ransomware", "rule:smb-bulk-transfer"
             score = max(p_attack, RULE_SCORE)
-        elif p_attack >= THREAT_THRESHOLD and top != "normal":
+        elif top is not None and p_attack >= THREAT_THRESHOLD and top != "normal":
             attack_type = CATEGORY_LABEL[top]
             if top == "r2l" and port in SSH_PORTS:
                 attack_type = "BruteForce"

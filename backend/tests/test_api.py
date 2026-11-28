@@ -20,10 +20,10 @@ def test_ingest_classifies_and_streams_to_websocket():
         with client.websocket_connect("/ws/chat") as ws:
             assert ws.receive_json()["type"] == "chat"
             assert ws.receive_json()["type"] == "agent_mode"
-            resp = client.post("/ingest", json={"events": [
-                {"src_ip": "45.33.12.99", "dst_ip": "192.168.1.10", "protocol": "TCP", "port": 445, "bytes": 60000}
-            ]})
-            assert resp.json() == {"accepted": 1, "threats": 1}
+            smb = {"src_ip": "45.33.12.99", "dst_ip": "192.168.1.10", "protocol": "TCP", "port": 445, "bytes": 60000}
+            # a case opens after ALERT_MIN_DETECTIONS detections from one source
+            resp = client.post("/ingest", json={"events": [smb] * sim.ALERT_MIN_DETECTIONS})
+            assert resp.json() == {"accepted": sim.ALERT_MIN_DETECTIONS, "threats": sim.ALERT_MIN_DETECTIONS}
             assert client.get("/health").json()["telemetry_source"] == "java-ingest"
             seen = []
             for _ in range(50):  # bounded so a missing mount fails instead of hanging
@@ -33,9 +33,9 @@ def test_ingest_classifies_and_streams_to_websocket():
     # the simulator may have sent baseline telemetry before the batch arrived
     seen = [m for m in seen if not (m["type"] == "telemetry" and m["data"]["src_ip"] != "45.33.12.99")]
     types = [m["type"] for m in seen]
-    assert types == ["telemetry", "chat", "workspace_mount"]
+    assert types == ["telemetry"] * sim.ALERT_MIN_DETECTIONS + ["chat", "workspace_mount"]
     assert seen[0]["data"]["attack_type"] == "Ransomware"
-    workspace = seen[2]["workspace"]
+    workspace = seen[-1]["workspace"]
     assert any("rule:smb-bulk-transfer" in e for e in workspace["evidence"])
 
 
@@ -289,3 +289,22 @@ def test_per_visitor_chat_limit():
                     break
     assert any("messages a minute" in r for r in replies)
     assert len(session.SESSIONS[cid].chat_times) == session.CHATS_PER_MINUTE
+
+
+def test_replayed_normal_traffic_never_opens_a_case():
+    """Isolated false positives on real normal flows don't page anyone."""
+    import asyncio
+    import session
+
+    class Quiet:
+        async def broadcast(self, message):
+            pass
+
+    visitor = session.Session(client_id="replay-normal-check")
+    with session.use_session(visitor):
+        import ws_handler
+        ws_handler.reset_current_workspace()
+        for _ in range(600):
+            asyncio.run(sim.process_event(Quiet(), sim._generate_baseline_event()))
+        flagged = sum(ev["is_threat"] for _, ev in visitor.recent_events)
+        assert not visitor.proactive_triggered, f"case opened from normal traffic ({flagged} flagged)"

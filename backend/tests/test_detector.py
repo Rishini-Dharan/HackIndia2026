@@ -29,7 +29,7 @@ def test_probabilities_sum_to_one():
 
 def test_simulated_benign_traffic_rarely_alerts():
     d = MLAnomalyDetector()
-    flagged = sum(d.classify(sim._generate_baseline_event())["is_threat"] for _ in range(2000))
+    flagged = sum(d.classify(sim._generate_synthetic_baseline_event())["is_threat"] for _ in range(2000))
     assert flagged / 2000 < 0.01
 
 
@@ -66,3 +66,24 @@ def test_detections_carry_mitre_technique():
     smb = d.classify(ev(src="45.33.12.99", port=445, nbytes=60000))
     assert smb["mitre"]["id"] == "T1486"
     assert d.classify(ev())["mitre"] is None
+
+
+def test_unsw_flow_model_matches_training_export():
+    """Replayed flows go through the gradient-boosted UNSW-NB15 model."""
+    from ml_detector import unsw_models
+    assert unsw_models() is not None, "ml/unsw_gbm.json missing"
+    d = MLAnomalyDetector()
+    pools = sim._replay_pools()
+    normal = [d.classify(sim._event_from_flow(r, "10.0.1.5", "10.0.0.9")) for r in pools["normal"][:500]]
+    attack = [d.classify(sim._event_from_flow(r, "45.33.12.99", "192.168.1.10")) for r in pools["attack"][:500]]
+    assert all(e["detector"] == "model:unsw-nb15-gbm" for e in normal + attack)
+    fp = sum(e["is_threat"] for e in normal) / len(normal)
+    tp = sum(e["is_threat"] for e in attack) / len(attack)
+    assert fp < 0.03, fp
+    assert tp > 0.5, tp
+
+
+def test_events_without_flow_features_keep_the_window_model():
+    d = MLAnomalyDetector()
+    r = d.classify(ev(src="45.33.12.99", port=445, nbytes=60000))
+    assert r["detector"] == "rule:smb-bulk-transfer"

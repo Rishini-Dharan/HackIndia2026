@@ -41,7 +41,8 @@ class Session:
     recent_events: deque = field(default_factory=lambda: deque(maxlen=1000))
     detector: MLAnomalyDetector = field(default_factory=MLAnomalyDetector)
     last_seen: float = field(default_factory=time.time)
-    chat_times: deque = field(default_factory=deque)  # recent chat messages, for rate limiting
+    chat_times: deque = field(default_factory=deque)
+    detections_by_src: dict = field(default_factory=dict)  # src ip -> recent detection times  # recent chat messages, for rate limiting
 
 
 SESSIONS: dict[str, Session] = {}

@@ -23,6 +23,9 @@ HYPOTHESES = {
     "DDoS": "{src} is flooding {dst} with a high connection rate on a single service.",
     "PortScan": "{src} is probing many services on {dst}, consistent with reconnaissance.",
     "BruteForce": "{src} is making repeated SSH connections to {dst}, consistent with password guessing.",
+    "Exploit": "{src} is sending flows to {dst} that match known exploit traffic.",
+    "Fuzzing": "{src} is sending malformed or randomized input to {dst}, consistent with fuzzing.",
+    "GenericAttack": "{src} is sending {dst} traffic the detector scores as an attack; the family model calls it generic.",
 }
 
 
