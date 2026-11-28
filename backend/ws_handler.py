@@ -398,6 +398,17 @@ async def handle_ws_message(
             })
             return
 
+        # Per-visitor limit before anything reaches memory or the LLM
+        import session as _session
+        if not _session.allow_chat(S()):
+            await manager.send_personal(websocket, {
+                "type": "chat",
+                "role": "agent",
+                "content": f"⏳ You're sending messages quickly. To keep the shared demo responsive, "
+                           f"each visitor gets {_session.CHATS_PER_MINUTE} messages a minute. Try again shortly.",
+            })
+            return
+
         # Add user's chat message to memory
         qdrant_memory.add_memory(
             text=f"User asked: {user_text}",

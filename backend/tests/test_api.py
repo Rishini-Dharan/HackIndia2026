@@ -269,3 +269,22 @@ def test_topology_clean_hosts_are_lan_addresses_only():
     clean = {n["id"] for n in sim.build_topology()["nodes"] if n["type"] == "clean"}
     assert clean == {"192.168.1.5", "10.0.1.7", "172.16.5.9"}
     S().recent_events.clear()
+
+
+def test_per_visitor_chat_limit():
+    import session
+    cid = "ratelimit-visitor-01"
+    with TestClient(main.app) as client:
+        with client.websocket_connect(f"/ws/chat?client={cid}") as ws:
+            ws.receive_json(); ws.receive_json()
+            for _ in range(session.CHATS_PER_MINUTE + 1):
+                ws.send_json({"type": "chat", "content": "what can you do?"})
+            replies = []
+            for _ in range(200):
+                m = ws.receive_json()
+                if m["type"] == "chat":
+                    replies.append(m["content"])
+                if any("messages a minute" in r for r in replies):
+                    break
+    assert any("messages a minute" in r for r in replies)
+    assert len(session.SESSIONS[cid].chat_times) == session.CHATS_PER_MINUTE

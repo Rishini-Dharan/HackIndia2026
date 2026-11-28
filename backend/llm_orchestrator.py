@@ -15,6 +15,9 @@ Supports four modes:
 import os
 import json
 import random
+import time
+from collections import deque
+
 import httpx
 from typing import Any, Literal
 
@@ -838,6 +841,23 @@ def _describe_error(e: Exception) -> str:
     return type(e).__name__
 
 
+# Shared LLM budget across all visitors. Groq's free tier allows ~8k tokens/min
+# (~6 planner calls); past this cap the scripted planner answers, visibly, so one
+# busy visitor can't exhaust the quota for everyone.
+GLOBAL_LLM_CALLS_PER_MINUTE = int(os.getenv("GLOBAL_LLM_CALLS_PER_MINUTE", "20"))
+_llm_call_times: deque = deque()
+
+
+def _llm_budget_available(now: float | None = None) -> bool:
+    now = time.time() if now is None else now
+    while _llm_call_times and now - _llm_call_times[0] > 60:
+        _llm_call_times.popleft()
+    if len(_llm_call_times) >= GLOBAL_LLM_CALLS_PER_MINUTE:
+        return False
+    _llm_call_times.append(now)
+    return True
+
+
 async def plan_investigation(user_text: str) -> list[dict]:
     """
     Main entry point. Routes the message through the configured LLM provider.
@@ -854,6 +874,9 @@ async def plan_investigation(user_text: str) -> list[dict]:
     route, key = routes[provider]
     if not key:
         _set_mode("scripted", "mock", f"{provider} selected but no API key set")
+        return await _mock_route(user_text)
+    if not _llm_budget_available():
+        _set_mode("scripted", "mock", "shared LLM budget busy, try again in a minute")
         return await _mock_route(user_text)
     try:
         result = await route(user_text)
