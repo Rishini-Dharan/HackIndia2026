@@ -110,6 +110,9 @@ def _replay_pools() -> dict | None:
                 rows = list(csv.DictReader(fh))
             _REPLAY = {"normal": [r for r in rows if r["attack_cat"] == "Normal"],
                        "attack": [r for r in rows if r["attack_cat"] != "Normal"]}
+            _REPLAY["families"] = {}
+            for r in _REPLAY["attack"]:
+                _REPLAY["families"].setdefault(r["attack_cat"], []).append(r)
     return _REPLAY or None
 
 
@@ -196,7 +199,10 @@ def _generate_attack_event() -> dict:
 
     pools = _replay_pools()
     if pools:
-        return _event_from_flow(random.choice(pools["attack"]), src_ip, "192.168.1.10")
+        # One attack family per simulated attack, so the case tells a coherent story.
+        family = S().attack_family or random.choice(sorted(pools["families"]))
+        S().attack_family = family
+        return _event_from_flow(random.choice(pools["families"][family]), src_ip, "192.168.1.10")
 
     return {
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -214,6 +220,7 @@ def _generate_attack_event() -> dict:
 
 def set_attack_mode(active: bool):
     S().is_attack_active = active
+    S().attack_family = None  # a new simulated attack picks a new family
     if not active:
         S().proactive_triggered = False
     print(f"[SIMULATOR] Attack mode updated: {active}")
@@ -257,12 +264,14 @@ def active_attackers(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> list[str]:
     """Sources of unblocked detections in the window, most recent first."""
     cutoff = time.time() - window_s
     seen: dict[str, None] = {}
+    counts: Counter = Counter()
     for t, ev in reversed(S().recent_events):
         if t < cutoff:
             break
         if ev["is_threat"] and ev["src_ip"] not in S().blocked_ips:
+            counts[ev["src_ip"]] += 1
             seen.setdefault(ev["src_ip"], None)
-    return list(seen)
+    return [ip for ip in seen if counts[ip] >= ALERT_MIN_DETECTIONS]
 
 
 def build_topology(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> dict:
@@ -270,7 +279,12 @@ def build_topology(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> dict:
     recently seen internal hosts are returned, marked clean."""
     cutoff = time.time() - window_s
     recent = [ev for t, ev in S().recent_events if t >= cutoff]
-    threats = [ev for ev in recent if ev["is_threat"] and ev["src_ip"] not in S().blocked_ips]
+    # Same rule as opening a case: a source counts as an attacker only after
+    # ALERT_MIN_DETECTIONS detections in the window, so a lone false positive on
+    # normal traffic never appears as an attacker on the map.
+    detections = Counter(ev["src_ip"] for ev in recent if ev["is_threat"])
+    threats = [ev for ev in recent if ev["is_threat"] and ev["src_ip"] not in S().blocked_ips
+               and detections[ev["src_ip"]] >= ALERT_MIN_DETECTIONS]
 
     pairs: dict[tuple, dict] = {}
     for ev in threats:
