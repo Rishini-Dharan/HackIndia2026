@@ -42,7 +42,8 @@ class Session:
     detector: MLAnomalyDetector = field(default_factory=MLAnomalyDetector)
     last_seen: float = field(default_factory=time.time)
     chat_times: deque = field(default_factory=deque)
-    detections_by_src: dict = field(default_factory=dict)  # src ip -> recent detection times  # recent chat messages, for rate limiting
+    detections_by_src: dict = field(default_factory=dict)
+    attack_family: str | None = None  # UNSW-NB15 family replayed by the current simulated attack  # src ip -> recent detection times  # recent chat messages, for rate limiting
 
 
 SESSIONS: dict[str, Session] = {}

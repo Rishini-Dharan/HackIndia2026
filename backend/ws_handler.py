@@ -66,6 +66,20 @@ def reset_current_workspace(event: dict | None = None):
     S().current_workspace["evidence"] = S().last_evidence
     S().current_workspace["confidence"] = round(event["score"] * 100, 1)
     S().current_workspace["threatType"] = event["attack_type"]
+    # The template is ransomware-themed; every attack-type label in its widgets
+    # must name the detected attack instead.
+    for widget in S().current_workspace.get("layout", []):
+        props = widget.get("props", {})
+        if "attackType" in props:
+            props["attackType"] = event["attack_type"]
+        for edge in props.get("edges", []):
+            edge["attackType"] = event["attack_type"]
+        if widget["component"] == "LiveTrafficChart":
+            where = f"port {event['port']}" if event["port"] else event["protocol"]
+            props["title"] = f"Traffic from {event['src_ip']} ({where})"
+            props["description"] = f"{event['protocol']} traffic from the flagged source"
+        elif widget["component"] == "ThreatTopology":
+            props["title"] = f"{event['attack_type']} blast radius"
     S().current_workspace["title"] = f"{event['attack_type']} investigation"
     template = HYPOTHESES.get(event["attack_type"], "{src} triggered a {kind} detection against {dst}.")
     S().current_workspace["hypothesis"] = template.format(src=S().attacker_ip, dst=S().victim_ip, kind=event["attack_type"])

@@ -308,3 +308,44 @@ def test_replayed_normal_traffic_never_opens_a_case():
             asyncio.run(sim.process_event(Quiet(), sim._generate_baseline_event()))
         flagged = sum(ev["is_threat"] for _, ev in visitor.recent_events)
         assert not visitor.proactive_triggered, f"case opened from normal traffic ({flagged} flagged)"
+
+
+def test_lone_false_positive_is_not_an_attacker_on_the_map():
+    import time as _t
+    S().recent_events.clear()
+    S().blocked_ips.clear()
+    now = _t.time()
+    lone = {"src_ip": "192.168.2.238", "dst_ip": "104.26.10.145", "is_threat": True,
+            "bytes": 100, "attack_type": "DDoS", "score": 0.97}
+    S().recent_events.append((now, lone))
+    assert not [n for n in sim.build_topology()["nodes"] if n["type"] == "attacker"]
+    assert sim.active_attackers() == []
+    for _ in range(sim.ALERT_MIN_DETECTIONS):
+        S().recent_events.append((now, {**lone, "src_ip": "45.33.12.99", "attack_type": "Exploit"}))
+    assert [n["id"] for n in sim.build_topology()["nodes"] if n["type"] == "attacker"] == ["45.33.12.99"]
+    assert sim.active_attackers() == ["45.33.12.99"]
+    S().recent_events.clear()
+
+
+def test_case_widgets_name_the_detected_attack():
+    import ws_handler
+    ws_handler.reset_current_workspace({"src_ip": "45.33.12.99", "dst_ip": "192.168.1.10", "port": 80,
+                                        "protocol": "TCP", "bytes": 500, "attack_type": "Exploit",
+                                        "score": 0.99, "detector": "model:unsw-nb15-gbm",
+                                        "severity": "critical", "ts": "now", "mitre": None})
+    text = str(S().current_workspace)
+    assert "Ransomware" not in text
+    containment = next(w for w in S().current_workspace["layout"] if w["component"] == "MitigationAction")
+    assert containment["props"]["attackType"] == "Exploit"
+    ws_handler.reset_current_workspace()
+
+
+def test_simulated_attack_replays_a_single_family():
+    import session
+    visitor = session.Session(client_id="family-check-0001")
+    with session.use_session(visitor):
+        sim.set_attack_mode(True)
+        families = {sim._generate_attack_event()["dataset_label"] for _ in range(40)}
+        assert len(families) == 1
+        sim.set_attack_mode(False)
+        assert visitor.attack_family is None
