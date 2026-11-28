@@ -35,7 +35,9 @@ async def plan_with_retry(prompt: str, retries: int):
         t0 = time.perf_counter()
         msgs = await llm.plan_investigation(prompt)
         latency = time.perf_counter() - t0
-        if "429" not in llm.LAST_MODE.get("reason", "") and "HTTPStatusError" not in llm.LAST_MODE.get("reason", ""):
+        reason = llm.LAST_MODE.get("reason", "")
+        # Groq 429s and our own shared-budget cap are both "wait and retry", not failures.
+        if not any(marker in reason for marker in ("429", "HTTPStatusError", "budget busy")):
             return msgs, latency
         if attempt < retries:
             print(f"      rate limited, waiting 20s (retry {attempt + 1}/{retries})")
