@@ -258,3 +258,14 @@ def test_llm_proposed_topology_nodes_are_replaced(monkeypatch):
     widget = next(m for m in msgs if m["type"] == "widget")
     assert all(n["id"] != "6.6.6.6" for n in widget["props"]["nodes"])
     assert "No active threats" in widget["props"]["description"]
+
+
+def test_topology_clean_hosts_are_lan_addresses_only():
+    import time as _t
+    S().recent_events.clear()
+    for src in ("192.168.1.5", "10.0.1.7", "172.16.5.9", "203.0.113.230", "8.8.8.8"):
+        S().recent_events.append((_t.time(), {"src_ip": src, "dst_ip": "198.51.100.1", "is_threat": False,
+                                              "bytes": 100, "attack_type": None, "score": 0.0}))
+    clean = {n["id"] for n in sim.build_topology()["nodes"] if n["type"] == "clean"}
+    assert clean == {"192.168.1.5", "10.0.1.7", "172.16.5.9"}
+    S().recent_events.clear()
