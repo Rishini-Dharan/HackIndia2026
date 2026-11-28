@@ -16,10 +16,10 @@ A Java service parses packet telemetry and streams it to a FastAPI hub. A detect
 | Part | Status |
 |---|---|
 | Java ingestion | Real. It parses `ts\|src\|dst\|proto\|port\|bytes\|flags` with a single `charAt` pass and POSTs batches to `/ingest`. The traffic it sends is generated; there is no packet capture. |
-| Detector | Real model. Multinomial logistic regression trained on NSL-KDD and evaluated on the held-out `KDDTest+` set (numbers below). Ransomware is a **signature rule** (SMB bulk transfer from an external IP), because NSL-KDD has no ransomware class. Each detection is tagged with its closest MITRE ATT&CK technique: a port scan maps to T1046 Network Service Discovery, the SMB rule to T1486 Data Encrypted for Impact. |
+| Detector | Two real models. **Replayed flows** (the live demo): gradient-boosted trees trained on UNSW-NB15 and evaluated in NumPy, AUC 0.94 on the held-out test set; a second small model names the likely attack family (67% accurate, so it's shown as *likely*). **Java-ingested events**, which carry no flow features: logistic regression on sliding-window features trained on NSL-KDD, plus a **signature rule** for SMB bulk transfer (NSL-KDD has no ransomware class). A case opens only after 3 detections from the same source within 60 seconds, so one false positive never pages anyone. Detections are tagged with their closest MITRE ATT&CK technique where one fits (a port scan maps to T1046, an exploit to T1190). |
 | Planner | Real LLM (Groq `openai/gpt-oss-120b` or OpenAI) when a key is set. Without one, a scripted keyword planner answers. The sidebar always shows which one answered, and a failed LLM call never falls back silently. |
 | Memory | Qdrant Cloud on the live demo, so saved cases survive deploys and restarts (checked: a case saved before a full redeploy was restored after it). Locally, an on-disk store (`backend/.qdrant`) is used when `QDRANT_URL` isn't set; `/health` reports which (`memory_store`). Every opened and contained case is saved as a full workspace snapshot; asking the agent to *continue* or *resume* reopens the latest one. Embeddings come from Gemini, or from a deterministic hash when no key is set (the live demo uses the hash). |
-| Hosted demo | **Real backend.** The Pages site connects to the FastAPI backend on Render, and the agent answers with `openai/gpt-oss-120b` on Groq. Telemetry there comes from the built-in simulator, because the Java ingester isn't deployed. If the backend is unreachable, the page falls back to a browser sandbox and the sidebar says so. The free Render instance sleeps when idle, so the first load can take up to a minute. |
+| Hosted demo | **Real backend.** The Pages site connects to the FastAPI backend on Render, and the agent answers with `openai/gpt-oss-120b` on Groq. Telemetry is **real UNSW-NB15 traffic**: 5,000 flows sampled from the dataset's held-out testing set (3,000 normal, 2,000 across five attack families), replayed with their sensor-computed features. Only the IP addresses are assigned at replay time, since the public CSV omits them. *Simulate Attack* replays the attack flows from one source. If the backend is unreachable, the page falls back to a browser sandbox and the sidebar says so. The free Render instance sleeps when idle, so the first load can take up to a minute. |
 | Visitors | Each browser gets a private session (client id in localStorage): its own simulated attack, workspace, blocklist, detector window and saved cases. One visitor's actions, including *clear memory*, never reach another. Chat is rate-limited per visitor (10 messages a minute) and across visitors by Groq's own token budget: the backend reads the remaining-tokens header on every response and stops calling the LLM when the next call wouldn't fit, so the scripted planner answers (and the sidebar says so) before Groq ever returns a 429, so one visitor can't exhaust the shared Groq quota. Real telemetry from the Java ingester feeds every session. |
 
 ## Numbers
@@ -35,15 +35,20 @@ All numbers are reproducible from this repo.
 
 The model only uses features the runtime can compute from a sliding window (bytes, connection count, service mix, protocol), so a random forest on the same features gets just 0.81 multiclass accuracy against 0.71 for the linear model. The detector stays linear so it runs on NumPy alone. R2L and U2R attacks are mostly missed; they need payload features this pipeline does not see. At the 0.95 threshold, the detector flagged 0 of 2,000 simulated benign events.
 
-**Does it generalize?** (`backend/ml/cross_dataset.json`, UNSW-NB15: a 2015 testbed with nine modern attack families, 82,332 held-out flows, same 11 features)
+**Live detector on modern traffic** (`backend/ml/unsw_live_metrics.json`, UNSW-NB15, 82,332 held-out flows the model never trained on)
 
-| Model | F1 | ROC AUC |
-|---|---|---|
-| Deployed NSL-KDD model, applied to UNSW-NB15 | 0.30 | 0.30 |
-| Logistic regression trained on UNSW-NB15 | 0.74 | 0.81 |
-| Gradient boosting trained on UNSW-NB15 | 0.84 | 0.94 |
+| | Value |
+|---|---|
+| ROC AUC (attack vs normal) | **0.94** |
+| Precision / recall at the 0.95 alert threshold | **0.98** / 0.72 |
+| Normal flows flagged at that threshold | 1.6% (1.4% on the replay sample) |
+| Attack-family model, accuracy on attacks | 0.67 (macro-F1 0.41) |
 
-The NSL-KDD model doesn't transfer: on modern traffic it ranks worse than chance. The window features themselves do carry signal, since gradient boosting reaches AUC 0.94 on UNSW-NB15. But that model misreads the demo's simulated traffic: it flags 43% of benign events and misses the synthetic scan and flood. So the live detector stays on NSL-KDD. Moving to UNSW-NB15 first needs a simulator that replays real flows instead of generating its own. Reproduce with `python ml/train.py --dataset unsw ...` and `python ml/compare_datasets.py ...`.
+Those isolated false positives are why a case needs 3 detections from one source within a minute. A test replays 600 normal flows and checks that no case opens.
+
+**Why not keep NSL-KDD?** (`backend/ml/cross_dataset.json`) The original NSL-KDD model doesn't transfer: on UNSW-NB15 it scores AUC 0.30, worse than chance. Gradient boosting on the same 11 features reaches 0.94. It couldn't go live until the demo replayed real flows, because on the old synthetic simulator it flagged 43% of benign events. NSL-KDD still covers Java-ingested events, which have no flow features.
+
+Data: UNSW-NB15 (N. Moustafa and J. Slay, *UNSW-NB15: a comprehensive data set for network intrusion detection systems*, MilCIS 2015), research use. `backend/ml/unsw_replay.csv.gz` holds six feature columns for the 5,000 sampled flows. Rebuild everything with `python ml/train_unsw_live.py --train UNSW_NB15_training-set.csv --test UNSW_NB15_testing-set.csv`.
 
 **Ingestion**: about **4.0M records/s** parse and serialize on one core (Java 21, laptop CPU, `java TelemetryIngestion --bench 2000000`, 3 runs: 3.9M to 4.1M).
 

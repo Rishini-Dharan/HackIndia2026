@@ -12,9 +12,13 @@ Features:
 """
 
 import asyncio
+import csv
+import gzip
+import os
 import random
 import time
 from collections import Counter, deque
+from pathlib import Path
 from ipaddress import ip_address, ip_network
 from datetime import datetime, timezone
 from session import S
@@ -85,8 +89,56 @@ def _random_external_ip() -> str:
     return f"{subnet}.{random.randint(1, 254)}"
 
 
+# ── UNSW-NB15 replay ─────────────────────────────────────────────
+# The demo replays flows sampled from UNSW-NB15's held-out *testing* set
+# (ml/unsw_replay.csv.gz, built by ml/train_unsw_live.py), so the live detector
+# scores real traffic it never trained on. Each flow keeps its sensor-computed
+# features; only IP addresses are assigned here, since the public CSV omits them.
+REPLAY_PATH = Path(__file__).resolve().parent / "ml" / "unsw_replay.csv.gz"
+SERVICE_PORTS = {"http": 80, "ssl": 443, "dns": 53, "ssh": 22, "smtp": 25, "ftp": 21,
+                 "ftp-data": 20, "pop3": 110, "snmp": 161, "dhcp": 67, "irc": 6667, "radius": 1812}
+_REPLAY: dict | None = None
+
+
+def _replay_pools() -> dict | None:
+    global _REPLAY
+    if _REPLAY is None:
+        if not REPLAY_PATH.exists() or os.getenv("QG_SIMULATOR") == "synthetic":
+            _REPLAY = {}
+        else:
+            with gzip.open(REPLAY_PATH, "rt", newline="") as fh:
+                rows = list(csv.DictReader(fh))
+            _REPLAY = {"normal": [r for r in rows if r["attack_cat"] == "Normal"],
+                       "attack": [r for r in rows if r["attack_cat"] != "Normal"]}
+    return _REPLAY or None
+
+
+def _event_from_flow(row: dict, src_ip: str, dst_ip: str) -> dict:
+    proto = row["proto"].upper()
+    port = SERVICE_PORTS.get(row["service"], random.randint(1024, 65535) if proto in ("TCP", "UDP") else 0)
+    flow = {k: row[k] for k in ("proto", "service", "sbytes", "ct_src_ltm", "ct_src_dport_ltm")}
+    return {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "src_ip": src_ip,
+        "dst_ip": dst_ip,
+        "protocol": proto,
+        "port": port,
+        "bytes": int(float(row["sbytes"])),
+        "flow": flow,
+        "dataset_label": row["attack_cat"],  # ground truth, kept out of the detector's input
+    }
+
+
 def _generate_baseline_event() -> dict:
-    """Generate a single realistic baseline telemetry event."""
+    pools = _replay_pools()
+    if pools:
+        dst = _random_external_ip() if random.random() < 0.7 else _random_internal_ip()
+        return _event_from_flow(random.choice(pools["normal"]), _random_internal_ip(), dst)
+    return _generate_synthetic_baseline_event()
+
+
+def _generate_synthetic_baseline_event() -> dict:
+    """Generate a single synthetic baseline telemetry event (used when no replay file)."""
     proto_name = random.choices(_PROTO_NAMES, weights=_PROTO_WEIGHTS, k=1)[0]
     profile = PROTOCOL_PROFILES[proto_name]
 
@@ -141,6 +193,10 @@ def _generate_attack_event() -> dict:
                 return _generate_baseline_event()
         else:
             return _generate_baseline_event()
+
+    pools = _replay_pools()
+    if pools:
+        return _event_from_flow(random.choice(pools["attack"]), src_ip, "192.168.1.10")
 
     return {
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -250,6 +306,11 @@ def build_topology(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> dict:
     return {"nodes": nodes, "edges": edges, "summary": summary}
 
 
+# Open a case only after repeated detections from one source, as SOC tooling does,
+# so an isolated false positive (~1.4% of replayed normal flows) never pages anyone.
+ALERT_MIN_DETECTIONS = 3
+ALERT_WINDOW_SECONDS = 60
+
 LAST_INGEST_AT: float = 0.0  # time of the last batch received from the Java ingester
 INGEST_TAKEOVER_SECONDS = 3.0
 
@@ -264,7 +325,13 @@ async def process_event(manager, raw_event: dict) -> dict:
     S().recent_events.append((time.time(), event))
     await manager.broadcast({"type": "telemetry", "data": event})
 
-    if event["is_threat"] and event["severity"] == "critical" and not S().proactive_triggered:
+    if event["is_threat"] and event["severity"] == "critical":
+        recent = S().detections_by_src.setdefault(event["src_ip"], deque())
+        recent.append(time.time())
+        while recent and time.time() - recent[0] > ALERT_WINDOW_SECONDS:
+            recent.popleft()
+    if (event["is_threat"] and event["severity"] == "critical" and not S().proactive_triggered
+            and len(S().detections_by_src.get(event["src_ip"], ())) >= ALERT_MIN_DETECTIONS):
         import ws_handler
         ws_handler.reset_current_workspace(event)
         ws_handler.save_active_investigation()

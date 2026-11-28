@@ -60,7 +60,7 @@ def simulator_features(n: int = 3000):
     d = MLAnomalyDetector()
     benign = []
     for _ in range(n):
-        ev = sim._generate_baseline_event()
+        ev = sim._generate_synthetic_baseline_event()  # the pre-replay synthetic simulator
         d._update(ev["src_ip"], int(ev["port"]), time.time())
         benign.append(d.features_for(ev))
 
