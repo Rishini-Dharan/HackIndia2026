@@ -15,7 +15,7 @@ import asyncio
 import random
 import time
 from collections import Counter, deque
-from ipaddress import ip_address
+from ipaddress import ip_address, ip_network
 from datetime import datetime, timezone
 from session import S
 
@@ -184,11 +184,17 @@ TOPOLOGY_WINDOW_SECONDS = 600
 MAX_NODES_PER_GROUP = 6
 
 
+# RFC 1918 LAN ranges only. ipaddress.is_private also counts documentation and
+# reserved ranges (e.g. 203.0.113.0/24), which are not internal hosts.
+_INTERNAL_NETS = [ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+
+
 def _is_private(ip: str) -> bool:
     try:
-        return ip_address(ip).is_private
+        addr = ip_address(ip)
     except ValueError:
         return False
+    return any(addr in net for net in _INTERNAL_NETS)
 
 
 def active_attackers(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> list[str]:
