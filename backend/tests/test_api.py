@@ -240,6 +240,7 @@ def test_llm_proposed_topology_nodes_are_replaced(monkeypatch):
     S().recent_events.clear()
 
     class FakeResp:
+        headers = {}
         def raise_for_status(self): pass
         def json(self):
             args = {"component": "ThreatTopology", "title": "Map",
