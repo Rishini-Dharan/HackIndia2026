@@ -841,10 +841,11 @@ def _describe_error(e: Exception) -> str:
     return type(e).__name__
 
 
-# Shared LLM budget across all visitors. Groq's free tier allows ~8k tokens/min
-# (~6 planner calls); past this cap the scripted planner answers, visibly, so one
-# busy visitor can't exhaust the quota for everyone.
-GLOBAL_LLM_CALLS_PER_MINUTE = int(os.getenv("GLOBAL_LLM_CALLS_PER_MINUTE", "20"))
+# Shared LLM budget across all visitors. Groq's free tier allows 8,000 tokens a
+# minute and a planner call uses ~1,200, so ~6 calls a minute is Groq's own limit.
+# Capping just below it makes the scripted planner answer (visibly) before Groq
+# starts rejecting calls with 429s.
+GLOBAL_LLM_CALLS_PER_MINUTE = int(os.getenv("GLOBAL_LLM_CALLS_PER_MINUTE", "6"))
 _llm_call_times: deque = deque()
 
 
