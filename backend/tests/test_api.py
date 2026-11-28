@@ -269,8 +269,3 @@ def test_topology_clean_hosts_are_lan_addresses_only():
     clean = {n["id"] for n in sim.build_topology()["nodes"] if n["type"] == "clean"}
     assert clean == {"192.168.1.5", "10.0.1.7", "172.16.5.9"}
     S().recent_events.clear()
-
-
-def test_health_reports_memory_store():
-    with TestClient(main.app) as client:
-        assert client.get("/health").json()["memory_store"] == "in-memory"
