@@ -1,0 +1,335 @@
+{
+  "summary": {
+    "mode": "llm",
+    "provider": "groq",
+    "model": "openai/gpt-oss-20b",
+    "fallback_cases": 0,
+    "valid": true,
+    "cases": 20,
+    "passed": 20,
+    "accuracy": 1.0,
+    "median_latency_s": 1.48
+  },
+  "cases": [
+    {
+      "prompt": "hi there",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 4.84,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "what can you do?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.16,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "who built you and how do you work?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.46,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "thanks, that's all for now",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.35,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "show me live network traffic",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 0.98,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "is there a bandwidth spike right now? plot the traffic",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 1.41,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "map the blast radius of the attack",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.48,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "which hosts are talking to the attacker? show the topology",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.3,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "open the incident triage board",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 1.2,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "list the active incidents by severity",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 1.07,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "block 45.33.12.99 immediately",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.5,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "isolate the compromised host",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.57,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "rate-limit the suspicious IPs for 24 hours",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.77,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "show the current firewall rules as a table",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 1.97,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "give me CPU and memory load metrics for the servers",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 1.77,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "write an incident report for INV-412",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 2.2,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "show live traffic and the threat topology side by side",
+      "expect": [
+        "LiveTrafficChart",
+        "ThreatTopology"
+      ],
+      "got": [
+        "LiveTrafficChart",
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.34,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "triage the incidents and prepare containment for the worst one",
+      "expect": [
+        "IncidentTriageBoard",
+        "MitigationAction"
+      ],
+      "got": [
+        "IncidentTriageBoard",
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 2.48,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "what is SMB and why is port 445 risky?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.47,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "explain the difference between a DDoS and a port scan",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 1.57,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    }
+  ]
+}

@@ -73,7 +73,8 @@ async def run(delay: float, retries: int, case_file: str):
         "median_latency_s": sorted(r["latency_s"] for r in rows)[len(rows) // 2],
     }
     suffix = "" if case_file == "cases.json" else "-" + Path(case_file).stem
-    out = HERE / f"results-{mode['mode']}-{mode['provider']}{suffix}.json"
+    model_slug = summary["model"].split("/")[-1] if summary["mode"] != "scripted" else "scripted"
+    out = HERE / f"results-{model_slug}{suffix}.json"
     out.write_text(json.dumps({"summary": summary, "cases": rows}, indent=2))
     print(json.dumps(summary, indent=2))
 

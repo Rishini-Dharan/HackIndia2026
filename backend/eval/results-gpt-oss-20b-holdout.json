@@ -1,0 +1,215 @@
+{
+  "summary": {
+    "mode": "mixed",
+    "provider": "groq",
+    "model": "openai/gpt-oss-20b",
+    "fallback_cases": 1,
+    "valid": false,
+    "cases": 12,
+    "passed": 11,
+    "accuracy": 0.917,
+    "median_latency_s": 1.56
+  },
+  "cases": [
+    {
+      "prompt": "good morning",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 4.67,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "how does ransomware usually spread inside a network?",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 2.16,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "graph the packets per second we're seeing right now",
+      "expect": [
+        "LiveTrafficChart"
+      ],
+      "got": [
+        "LiveTrafficChart"
+      ],
+      "pass": true,
+      "latency_s": 1.26,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "who is attacking which servers? draw it",
+      "expect": [
+        "ThreatTopology"
+      ],
+      "got": [
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.37,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "what incidents are open right now?",
+      "expect": [
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": true,
+      "latency_s": 1.56,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "quarantine 203.0.113.50",
+      "expect": [
+        "MitigationAction"
+      ],
+      "got": [
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.14,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "give me a summary report of today's incidents for my manager",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "IncidentTriageBoard"
+      ],
+      "pass": false,
+      "latency_s": 3.52,
+      "mode": {
+        "mode": "scripted",
+        "provider": "mock",
+        "reason": "groq request failed: HTTP 400 tool_use_failed (model openai/gpt-oss-20b)",
+        "model": ""
+      }
+    },
+    {
+      "prompt": "show me a table of the top talkers on the network",
+      "expect": [
+        "DynamicDashboard"
+      ],
+      "got": [
+        "DynamicDashboard"
+      ],
+      "pass": true,
+      "latency_s": 1.73,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "plot traffic, and also show me the containment controls",
+      "expect": [
+        "LiveTrafficChart",
+        "MitigationAction"
+      ],
+      "got": [
+        "LiveTrafficChart",
+        "MitigationAction"
+      ],
+      "pass": true,
+      "latency_s": 1.56,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "map the attackers and list the open incidents",
+      "expect": [
+        "ThreatTopology",
+        "IncidentTriageBoard"
+      ],
+      "got": [
+        "IncidentTriageBoard",
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.47,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "I need the traffic graph, the attack map and the block controls",
+      "expect": [
+        "LiveTrafficChart",
+        "ThreatTopology",
+        "MitigationAction"
+      ],
+      "got": [
+        "LiveTrafficChart",
+        "MitigationAction",
+        "ThreatTopology"
+      ],
+      "pass": true,
+      "latency_s": 1.36,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    },
+    {
+      "prompt": "thanks, that's helpful",
+      "expect": [],
+      "got": [],
+      "pass": true,
+      "latency_s": 0.97,
+      "mode": {
+        "mode": "llm",
+        "provider": "groq",
+        "reason": "",
+        "model": "openai/gpt-oss-20b"
+      }
+    }
+  ]
+}
