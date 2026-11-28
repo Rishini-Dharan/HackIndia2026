@@ -30,7 +30,8 @@ def test_without_keys_planner_reports_scripted_mode():
 
 
 def test_provider_failure_falls_back_visibly(monkeypatch):
-    async def boom(_):
+    monkeypatch.setattr(llm, "GROQ_FALLBACK_MODEL", "")
+    async def boom(_, model=None):
         raise RuntimeError("down")
 
     monkeypatch.setattr(llm, "LLM_PROVIDER", "groq")
@@ -43,9 +44,10 @@ def test_provider_failure_falls_back_visibly(monkeypatch):
 
 
 def test_fallback_reason_names_status_and_error_code(monkeypatch):
+    monkeypatch.setattr(llm, "GROQ_FALLBACK_MODEL", "")
     import httpx
 
-    async def not_found(_):
+    async def not_found(_, model=None):
         req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
         resp = httpx.Response(404, request=req, json={"error": {"code": "model_not_found", "message": "secret-free"}})
         raise httpx.HTTPStatusError("404", request=req, response=resp)
@@ -88,9 +90,10 @@ def test_tool_schema_is_a_widget_list():
 
 
 def test_global_llm_budget_falls_back_visibly(monkeypatch):
+    monkeypatch.setattr(llm, "GROQ_FALLBACK_MODEL", "")
     calls = []
 
-    async def fake_groq(text):
+    async def fake_groq(text, model=None):
         calls.append(text)
         return [{"type": "chat", "role": "agent", "content": "llm"}]
 
@@ -148,7 +151,7 @@ def test_429_blocks_until_retry_after():
 def test_low_token_budget_falls_back_without_calling_provider(monkeypatch):
     calls = []
 
-    async def fake_groq(text):
+    async def fake_groq(text, model=None):
         calls.append(text)
         return [{"type": "chat", "role": "agent", "content": "llm"}]
 
@@ -156,8 +159,31 @@ def test_low_token_budget_falls_back_without_calling_provider(monkeypatch):
     monkeypatch.setattr(llm, "GROQ_API_KEY", "test-key")
     monkeypatch.setattr(llm, "_groq_route", fake_groq)
     import time as _time
+    monkeypatch.setattr(llm, "GROQ_FALLBACK_MODEL", "")
     llm._token_budget.update(remaining=500, reset_at=_time.time() + 30)
     asyncio.run(llm.plan_investigation("hello"))
     assert calls == []
     assert "budget" in llm.LAST_MODE["reason"]
     llm._token_budget.update(remaining=None, reset_at=0.0)
+
+
+def test_spent_primary_model_falls_back_to_second_model(monkeypatch):
+    import time as _time
+    used = []
+
+    async def fake_groq(text, model=None):
+        used.append(model)
+        return [{"type": "chat", "role": "agent", "content": "ok"}]
+
+    monkeypatch.setattr(llm, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(llm, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_groq_route", fake_groq)
+    monkeypatch.setattr(llm, "GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+    llm._llm_call_times.clear()
+    llm._budget_for(llm.GROQ_MODEL).update(remaining=100, reset_at=_time.time() + 30)
+    llm._budget_for("openai/gpt-oss-20b").update(remaining=None, reset_at=0.0)
+    asyncio.run(llm.plan_investigation("hello"))
+    assert used == ["openai/gpt-oss-20b"]
+    assert llm.LAST_MODE["mode"] == "llm" and llm.LAST_MODE["model"] == "openai/gpt-oss-20b"
+    llm._token_budgets.clear()
+    llm._token_budget = llm._budget_for(llm.GROQ_MODEL)

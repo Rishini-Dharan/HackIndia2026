@@ -80,7 +80,7 @@ export default function Sidebar({ theme, toggleTheme }: { theme: 'dark' | 'light
             <br />
             <span className="font-semibold text-text-muted">Agent: </span>
             {agentMode?.mode === 'llm'
-              ? `LLM (${agentMode.provider})`
+              ? `LLM (${agentMode.model ? agentMode.model.split("/").pop() : agentMode.provider})`
               : agentMode?.mode === 'scripted'
                 ? 'scripted planner (no LLM key)'
                 : agentMode?.mode === 'sandbox'

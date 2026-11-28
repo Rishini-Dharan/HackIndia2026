@@ -8,7 +8,7 @@
     "cases": 12,
     "passed": 12,
     "accuracy": 1.0,
-    "median_latency_s": 1.37
+    "median_latency_s": 1.76
   },
   "cases": [
     {
@@ -16,11 +16,12 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 1.96,
+      "latency_s": 5.49,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -28,11 +29,12 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 2.72,
+      "latency_s": 2.19,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -44,11 +46,12 @@
         "LiveTrafficChart"
       ],
       "pass": true,
-      "latency_s": 1.37,
+      "latency_s": 1.35,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -60,11 +63,12 @@
         "ThreatTopology"
       ],
       "pass": true,
-      "latency_s": 0.96,
+      "latency_s": 1.63,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -76,11 +80,12 @@
         "IncidentTriageBoard"
       ],
       "pass": true,
-      "latency_s": 0.84,
+      "latency_s": 1.67,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -92,11 +97,12 @@
         "MitigationAction"
       ],
       "pass": true,
-      "latency_s": 1.26,
+      "latency_s": 1.78,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -108,11 +114,12 @@
         "DynamicDashboard"
       ],
       "pass": true,
-      "latency_s": 2.79,
+      "latency_s": 2.48,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -124,11 +131,12 @@
         "DynamicDashboard"
       ],
       "pass": true,
-      "latency_s": 1.9,
+      "latency_s": 2.17,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -142,11 +150,12 @@
         "MitigationAction"
       ],
       "pass": true,
-      "latency_s": 1.55,
+      "latency_s": 1.67,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -160,11 +169,12 @@
         "ThreatTopology"
       ],
       "pass": true,
-      "latency_s": 1.21,
+      "latency_s": 1.66,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -180,11 +190,12 @@
         "ThreatTopology"
       ],
       "pass": true,
-      "latency_s": 1.3,
+      "latency_s": 1.76,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     },
     {
@@ -192,11 +203,12 @@
       "expect": [],
       "got": [],
       "pass": true,
-      "latency_s": 1.14,
+      "latency_s": 1.27,
       "mode": {
         "mode": "llm",
         "provider": "groq",
-        "reason": ""
+        "reason": "",
+        "model": "openai/gpt-oss-120b"
       }
     }
   ]

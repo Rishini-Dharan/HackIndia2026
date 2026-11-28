@@ -77,6 +77,7 @@ export interface AgentMode {
   mode: 'llm' | 'scripted' | 'sandbox'
   provider: string
   reason?: string
+  model?: string
 }
 
 // ── Constants ────────────────────────────────────────────────────
@@ -495,7 +496,7 @@ export const useWebSocketStore = create<WebSocketState>((set, get) => {
 
             switch (data.type) {
               case 'agent_mode': {
-                set({ agentMode: { mode: data.mode, provider: data.provider, reason: data.reason } })
+                set({ agentMode: { mode: data.mode, provider: data.provider, reason: data.reason, model: data.model } })
                 break
               }
 

@@ -52,7 +52,13 @@ The NSL-KDD model doesn't transfer: on modern traffic it ranks worse than chance
 | Planner | Main set (20) | Held-out (12) |
 |---|---|---|
 | Scripted keyword planner | 16/20 | 6/12 |
-| `openai/gpt-oss-120b` on Groq | **20/20** (two runs, 0 fallbacks) | **12/12** (0 fallbacks) |
+| `openai/gpt-oss-120b`, original prompt | **20/20** (two runs) | **12/12** |
+| `openai/gpt-oss-120b`, shorter prompt (live) | 19/20 + 1 malformed tool call | **12/12** |
+| `openai/gpt-oss-20b`, shorter prompt (live fallback) | **20/20** | 11/12 + 1 malformed tool call |
+
+A *malformed tool call* means the model wrote invalid JSON (a `//` comment inside the arguments) and Groq rejected it. That happens about once per run on either model and either prompt. Live, the planner tries 120b, then 20b, then the scripted planner, so one model's bad call rarely reaches a visitor.
+
+**Capacity.** Groq's free tier meters each model separately at 8,000 tokens a minute. The shorter system prompt cut a call's fixed cost from 1,160 to 831 tokens. Memory context is now capped at three short snippets, and raw chat history is left out. Falling back to `gpt-oss-20b` adds a second budget, so the demo gives roughly twice as many LLM answers per minute before the scripted planner takes over.
 
 The jump from 16 to 20 came from changing the tool, not the prompt: the planner now returns every widget in one `render_security_widgets` call. With one widget per call, the model made one call and dropped the second view of a two-part request. Free Groq tiers cap tokens per minute, so run the eval with `--delay 10`; a run is marked invalid if any case fell back to the scripted planner.
 

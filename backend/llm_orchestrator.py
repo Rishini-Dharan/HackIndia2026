@@ -48,8 +48,8 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER") or _default_provider()
 LAST_MODE: dict = {"mode": "scripted" if LLM_PROVIDER == "mock" else "llm", "provider": LLM_PROVIDER, "reason": ""}
 
 
-def _set_mode(mode: str, provider: str, reason: str = ""):
-    LAST_MODE.update(mode=mode, provider=provider, reason=reason)
+def _set_mode(mode: str, provider: str, reason: str = "", model: str = ""):
+    LAST_MODE.update(mode=mode, provider=provider, reason=reason, model=model)
 
 
 class WidgetCall(BaseModel):
@@ -119,36 +119,28 @@ RENDER_WIDGET_TOOL = {
     },
 }
 
-SYSTEM_PROMPT = """You are Q-Guardian OS, an intelligent AI Security Operations Center assistant built for real-time threat investigation and incident response.
+SYSTEM_PROMPT = """You are Q-Guardian OS, a security operations assistant that builds investigation workspaces on demand. Be professional, concise and conversational.
 
-You are a conversational AI — NOT a static dashboard generator. You must behave like a knowledgeable, professional security analyst who can hold natural conversations.
+Rules:
+1. Greetings, thanks, general or "what can you do" questions: answer in text only. No widgets.
+2. Use render_security_widgets only for explicit security operations: monitoring traffic, mapping threats, viewing incidents, mitigation, dashboards or reports.
+3. Make ONE render_security_widgets call per turn listing EVERY widget the request needs. "Traffic and topology" or "triage and then containment" need two entries.
+4. A short text message alongside the tool call is welcome.
 
-## CRITICAL RULES FOR CONVERSATION:
-1. For greetings (hi, hello, hey, etc.), casual questions, or general conversation — respond NATURALLY and conversationally. Do NOT mount any widgets. Just talk like a helpful AI assistant.
-2. If the user asks who you are, what you can do, or about your capabilities — explain yourself naturally in your own words. You are Q-Guardian OS, an adaptive AI investigation operating system that dynamically composes security workspaces in real-time.
-3. Only use the render_security_widgets tool when the user EXPLICITLY asks for security operations like monitoring traffic, analyzing threats, viewing incidents, or taking mitigation actions.
-4. When using the tool, you may include a brief natural language message alongside it to explain what you're doing.
-5. Make ONE render_security_widgets call per turn and list every widget the request needs in `widgets`. A request for two views (for example 'traffic and topology', or 'triage and then containment') needs two entries. Incident lists and severity rankings belong in IncidentTriageBoard.
-6. Written deliverables (incident reports, summaries for management) go in a DynamicDashboard with layoutType 'document', not in plain chat text.
+Widget choice:
+- LiveTrafficChart: traffic, bandwidth, packets.
+- ThreatTopology: attack maps, blast radius, who is attacking what.
+- IncidentTriageBoard: open or active incidents, incident lists, severity rankings, triage.
+- MitigationAction: block, isolate, quarantine, rate-limit, containment.
+- DynamicDashboard: tables, metrics, firewall rules, and written deliverables such as incident reports or management summaries (layoutType 'document').
 
-## WHEN TO USE render_security_widgets:
-- Live traffic monitoring or network data → mount LiveTrafficChart
-- Threat analysis, topology, blast radius, or attack mapping → mount ThreatTopology
-- Summaries of active threats, triage, or incident boards → mount IncidentTriageBoard
-- Mitigation, blocking, isolating IPs, or incident response → mount MitigationAction
-- Custom dashboards, firewall rules tables, system load metrics → mount DynamicDashboard
+DynamicDashboard props by layoutType:
+- cards: data [{label, value, trend?, trendColor?: green|red|neutral}]
+- table: columns [{key, label}], rows [...], actions? [{action, label, style?: default|danger}]
+- form: fields [{name, label, type: text|number|slider|toggle, value, min?, max?}]
+- document: blocks [{type: title|section|paragraph|keyvalue|list, content}]
 
-For DynamicDashboard props, configure it based on layoutType:
-1. 'cards' -> data: Array of { label: str, value: str|num, trend?: str, trendColor?: 'green'|'red'|'neutral' }
-2. 'table' -> columns: Array of { key: str, label: str }, rows: Array of objects, actions?: Array of { action: str, label: str, style?: 'default'|'danger' }
-3. 'form' -> fields: Array of { name: str, label: str, type: 'text'|'number'|'slider'|'toggle', value: any, min?: num, max?: num }
-4. 'document' -> blocks: Array of { type: 'title'|'section'|'paragraph'|'keyvalue'|'list', content: any }
-
-You are stateful. You have access to a vector database (Qdrant) which remembers past interactions, blocked IPs, and incidents. Use retrieved memory context to reply intelligently.
-
-Your personality: Professional yet approachable. Concise but not robotic. You are a proactive security partner, not a tool that only responds to keywords.
-
-Remember: If the user says "hi" or asks a general question, just TALK to them naturally. Do NOT call any tools for conversational messages."""
+Retrieved memory (past cases, blocked IPs) may follow; use it when relevant."""
 
 
 # ── Mock Mode (keyword-based intent matching) ────────────────────
@@ -711,10 +703,11 @@ async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str
     import qdrant_memory
     
     # Retrieve related memories from Qdrant
-    memories = qdrant_memory.search_memory(user_text, limit=5)
-    context_str = ""
-    if memories:
-        context_str = "\n".join([f"- {m['text']}" for m in memories])
+    # Short, relevant context: cases and actions, not raw chat history (which mostly
+    # repeats earlier replies), clipped so a long session can't bloat every call.
+    memories = [m for m in qdrant_memory.search_memory(user_text, limit=6)
+                if m.get("category") != "chat_history"][:3]
+    context_str = "\n".join(f"- {m['text'][:160]}" for m in memories)
         
     system_prompt = SYSTEM_PROMPT
     if context_str:
@@ -739,7 +732,7 @@ async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str
                     "temperature": 0.3,
                 },
             )
-            record_rate_limit_headers(resp.headers)
+            record_rate_limit_headers(resp.headers, model=model)
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPStatusError as e:
@@ -793,13 +786,18 @@ async def _openai_route(user_text: str) -> list[dict]:
     )
 
 
-async def _groq_route(user_text: str) -> list[dict]:
+# Tried when the primary model's token budget is spent. Groq meters each model
+# separately, so this roughly doubles the LLM answers per minute. Empty disables it.
+GROQ_FALLBACK_MODEL = os.getenv("GROQ_FALLBACK_MODEL", "openai/gpt-oss-20b")
+
+
+async def _groq_route(user_text: str, model: str | None = None) -> list[dict]:
     """Route via Groq cloud API (OpenAI-compatible, ultra-fast inference)."""
     return await _openai_compatible_route(
         user_text,
         api_url=GROQ_BASE_URL,
         api_key=GROQ_API_KEY,
-        model=GROQ_MODEL,
+        model=model or GROQ_MODEL,
     )
 
 
@@ -853,8 +851,16 @@ _llm_call_times: deque = deque()
 # x-ratelimit-reset-tokens on every response (and retry-after on a 429). Call sizes
 # vary with how much memory context a visitor has, so counting calls alone can't
 # prevent 429s; checking the reported token budget can.
-MIN_TOKENS_FOR_CALL = int(os.getenv("MIN_TOKENS_FOR_CALL", "2500"))
-_token_budget = {"remaining": None, "reset_at": 0.0}
+MIN_TOKENS_FOR_CALL = int(os.getenv("MIN_TOKENS_FOR_CALL", "1800"))
+# Groq meters tokens per model, so each model in the fallback chain has its own budget.
+_token_budgets: dict[str, dict] = {}
+
+
+def _budget_for(model: str) -> dict:
+    return _token_budgets.setdefault(model, {"remaining": None, "reset_at": 0.0})
+
+
+_token_budget = _budget_for(GROQ_MODEL)  # primary model's budget (kept for tests and logs)
 
 
 def _parse_duration(value: str) -> float | None:
@@ -874,26 +880,28 @@ def _parse_duration(value: str) -> float | None:
     return sum(float(n) * scale[u] for n, u in parts)
 
 
-def record_rate_limit_headers(headers, now: float | None = None):
+def record_rate_limit_headers(headers, now: float | None = None, model: str | None = None):
     now = time.time() if now is None else now
+    budget = _budget_for(model or GROQ_MODEL)
     remaining = headers.get("x-ratelimit-remaining-tokens")
     reset = _parse_duration(headers.get("retry-after") or headers.get("x-ratelimit-reset-tokens") or "")
     if remaining is not None:
         try:
-            _token_budget["remaining"] = int(float(remaining))
+            budget["remaining"] = int(float(remaining))
         except ValueError:
             return
     if headers.get("retry-after"):
-        _token_budget["remaining"] = 0  # a 429: nothing left until the reset
+        budget["remaining"] = 0  # a 429: nothing left until the reset
     if reset is not None:
-        _token_budget["reset_at"] = now + reset
+        budget["reset_at"] = now + reset
 
 
-def _tokens_available(now: float | None = None) -> bool:
+def _tokens_available(now: float | None = None, model: str | None = None) -> bool:
     now = time.time() if now is None else now
-    if _token_budget["remaining"] is None or now >= _token_budget["reset_at"]:
+    budget = _budget_for(model or GROQ_MODEL)
+    if budget["remaining"] is None or now >= budget["reset_at"]:
         return True  # unknown or window already reset: let the call find out
-    return _token_budget["remaining"] >= MIN_TOKENS_FOR_CALL
+    return budget["remaining"] >= MIN_TOKENS_FOR_CALL
 
 
 def _llm_budget_available(now: float | None = None) -> bool:
@@ -923,14 +931,22 @@ async def plan_investigation(user_text: str) -> list[dict]:
     if not key:
         _set_mode("scripted", "mock", f"{provider} selected but no API key set")
         return await _mock_route(user_text)
-    if not _tokens_available() or not _llm_budget_available():
-        _set_mode("scripted", "mock", "shared LLM budget busy, try again in a minute")
-        return await _mock_route(user_text)
-    try:
-        result = await route(user_text)
-        _set_mode("llm", provider)
-        return result
-    except Exception as e:
-        print(f"[LLM] {provider} error: {e}. Falling back to scripted planner.")
-        _set_mode("scripted", "mock", f"{provider} request failed: {_describe_error(e)}")
-        return await _mock_route(user_text)
+    if provider != "groq":
+        models = [None]
+    else:
+        models = [m for m in dict.fromkeys([GROQ_MODEL, GROQ_FALLBACK_MODEL]) if m]
+    last_error = ""
+    for model in models:
+        if provider == "groq" and not _tokens_available(model=model):
+            continue
+        if not _llm_budget_available():
+            break
+        try:
+            result = await (route(user_text, model) if provider == "groq" else route(user_text))
+            _set_mode("llm", provider, model=model or "")
+            return result
+        except Exception as e:
+            print(f"[LLM] {provider} {model or ''} error: {e}. Trying the next option.")
+            last_error = f"{provider} request failed: {_describe_error(e)}"
+    _set_mode("scripted", "mock", last_error or "shared LLM budget busy, try again in a minute")
+    return await _mock_route(user_text)
