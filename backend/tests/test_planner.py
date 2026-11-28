@@ -116,3 +116,48 @@ def test_budget_window_slides():
     assert not llm._llm_budget_available(now=1001.0)
     assert llm._llm_budget_available(now=1061.0)  # oldest calls aged out
     llm._llm_call_times.clear()
+
+
+@pytest.mark.parametrize("text,seconds", [
+    ("7.66s", 7.66), ("2m59.56s", 179.56), ("1h2m3s", 3723.0), ("850ms", 0.85), ("12", 12.0), ("", None),
+])
+def test_parse_groq_durations(text, seconds):
+    got = llm._parse_duration(text)
+    assert got == pytest.approx(seconds) if seconds is not None else got is None
+
+
+def test_token_budget_gates_calls_until_reset():
+    llm._token_budget.update(remaining=None, reset_at=0.0)
+    assert llm._tokens_available(now=100.0)  # unknown budget: allowed
+    llm.record_rate_limit_headers({"x-ratelimit-remaining-tokens": "900", "x-ratelimit-reset-tokens": "7.5s"}, now=100.0)
+    assert not llm._tokens_available(now=101.0)  # too few tokens left
+    assert llm._tokens_available(now=108.0)  # window reset
+    llm.record_rate_limit_headers({"x-ratelimit-remaining-tokens": "6000", "x-ratelimit-reset-tokens": "5s"}, now=200.0)
+    assert llm._tokens_available(now=201.0)
+    llm._token_budget.update(remaining=None, reset_at=0.0)
+
+
+def test_429_blocks_until_retry_after():
+    llm._token_budget.update(remaining=None, reset_at=0.0)
+    llm.record_rate_limit_headers({"retry-after": "4"}, now=50.0)
+    assert not llm._tokens_available(now=52.0)
+    assert llm._tokens_available(now=54.5)
+    llm._token_budget.update(remaining=None, reset_at=0.0)
+
+
+def test_low_token_budget_falls_back_without_calling_provider(monkeypatch):
+    calls = []
+
+    async def fake_groq(text):
+        calls.append(text)
+        return [{"type": "chat", "role": "agent", "content": "llm"}]
+
+    monkeypatch.setattr(llm, "LLM_PROVIDER", "groq")
+    monkeypatch.setattr(llm, "GROQ_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_groq_route", fake_groq)
+    import time as _time
+    llm._token_budget.update(remaining=500, reset_at=_time.time() + 30)
+    asyncio.run(llm.plan_investigation("hello"))
+    assert calls == []
+    assert "budget" in llm.LAST_MODE["reason"]
+    llm._token_budget.update(remaining=None, reset_at=0.0)

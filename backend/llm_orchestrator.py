@@ -739,6 +739,7 @@ async def _openai_compatible_route(user_text: str, *, api_url: str, api_key: str
                     "temperature": 0.3,
                 },
             )
+            record_rate_limit_headers(resp.headers)
             resp.raise_for_status()
             data = resp.json()
     except httpx.HTTPStatusError as e:
@@ -841,12 +842,58 @@ def _describe_error(e: Exception) -> str:
     return type(e).__name__
 
 
-# Shared LLM budget across all visitors. Groq's free tier allows 8,000 tokens a
-# minute and a planner call uses ~1,200, so ~6 calls a minute is Groq's own limit.
-# Capping just below it makes the scripted planner answer (visibly) before Groq
-# starts rejecting calls with 429s.
-GLOBAL_LLM_CALLS_PER_MINUTE = int(os.getenv("GLOBAL_LLM_CALLS_PER_MINUTE", "6"))
+# Shared LLM budget across all visitors. The real gate is the provider's reported
+# token budget (see _tokens_available); this per-minute call count is a backstop
+# against a flood of calls before the first response headers arrive.
+GLOBAL_LLM_CALLS_PER_MINUTE = int(os.getenv("GLOBAL_LLM_CALLS_PER_MINUTE", "30"))  # backstop; the token budget below is the real gate
 _llm_call_times: deque = deque()
+
+
+# Token budget reported by the provider. Groq sends x-ratelimit-remaining-tokens and
+# x-ratelimit-reset-tokens on every response (and retry-after on a 429). Call sizes
+# vary with how much memory context a visitor has, so counting calls alone can't
+# prevent 429s; checking the reported token budget can.
+MIN_TOKENS_FOR_CALL = int(os.getenv("MIN_TOKENS_FOR_CALL", "2500"))
+_token_budget = {"remaining": None, "reset_at": 0.0}
+
+
+def _parse_duration(value: str) -> float | None:
+    """Groq durations look like '7.66s', '2m59.56s', '1h2m3s' or '850ms'."""
+    import re
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return float(value)  # retry-after is plain seconds
+    except ValueError:
+        pass
+    parts = re.findall(r"(\d+(?:\.\d+)?)(ms|h|m|s)", value)
+    if not parts:
+        return None
+    scale = {"h": 3600, "m": 60, "s": 1, "ms": 0.001}
+    return sum(float(n) * scale[u] for n, u in parts)
+
+
+def record_rate_limit_headers(headers, now: float | None = None):
+    now = time.time() if now is None else now
+    remaining = headers.get("x-ratelimit-remaining-tokens")
+    reset = _parse_duration(headers.get("retry-after") or headers.get("x-ratelimit-reset-tokens") or "")
+    if remaining is not None:
+        try:
+            _token_budget["remaining"] = int(float(remaining))
+        except ValueError:
+            return
+    if headers.get("retry-after"):
+        _token_budget["remaining"] = 0  # a 429: nothing left until the reset
+    if reset is not None:
+        _token_budget["reset_at"] = now + reset
+
+
+def _tokens_available(now: float | None = None) -> bool:
+    now = time.time() if now is None else now
+    if _token_budget["remaining"] is None or now >= _token_budget["reset_at"]:
+        return True  # unknown or window already reset: let the call find out
+    return _token_budget["remaining"] >= MIN_TOKENS_FOR_CALL
 
 
 def _llm_budget_available(now: float | None = None) -> bool:
@@ -876,7 +923,7 @@ async def plan_investigation(user_text: str) -> list[dict]:
     if not key:
         _set_mode("scripted", "mock", f"{provider} selected but no API key set")
         return await _mock_route(user_text)
-    if not _llm_budget_available():
+    if not _tokens_available() or not _llm_budget_available():
         _set_mode("scripted", "mock", "shared LLM budget busy, try again in a minute")
         return await _mock_route(user_text)
     try:
