@@ -1,0 +1,46 @@
+name: Planner eval
+
+# Weekly check that the live LLM planner still picks the right widgets. Catches
+# provider-side changes (a model removed, tool calling broken) that unit tests
+# can't. Runs the main and held-out sets against the real Groq API.
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      GROQ_MODEL: openai/gpt-oss-120b
+      GROQ_FALLBACK_MODEL: ""  # score the primary model alone
+      QDRANT_PATH: ":memory:"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Check the API key is configured
+        run: test -n "$GROQ_API_KEY" || { echo "Add a GROQ_API_KEY repository secret"; exit 1; }
+      - name: Main set (20 requests)
+        run: python eval/run_eval.py --delay 10 --cases cases.json
+      - name: Held-out set (12 requests)
+        run: python eval/run_eval.py --delay 10 --cases holdout.json
+      - name: Pass/fail
+        run: python eval/check_results.py results-gpt-oss-120b.json:17 results-gpt-oss-120b-holdout.json:10
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planner-eval-results
+          path: backend/eval/results-*.json
