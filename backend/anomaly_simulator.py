@@ -17,9 +17,8 @@ import time
 from collections import Counter, deque
 from ipaddress import ip_address
 from datetime import datetime, timezone
-from ml_detector import MLAnomalyDetector
+from session import S
 
-detector = MLAnomalyDetector()
 
 
 # ── Realistic Traffic Configuration ──────────────────────────────
@@ -73,10 +72,6 @@ SEVERITY_WEIGHTS = [0.45, 0.30, 0.18, 0.07]
 
 # ── Global State ─────────────────────────────────────────────────
 
-IS_ATTACK_ACTIVE = False
-PROACTIVE_TRIGGERED = False
-BLOCKED_IPS: set[str] = set()
-_MITIGATION_TIME: float | None = None  # timestamp of when mitigation was applied
 _DAMPENING_DURATION = 5.0  # seconds of gradual threat reduction after block
 
 
@@ -133,9 +128,9 @@ def _generate_attack_event() -> dict:
     src_ip = "45.33.12.99"
 
     # If this IP is blocked, check dampening window
-    if src_ip in BLOCKED_IPS:
-        if _MITIGATION_TIME is not None:
-            elapsed = time.time() - _MITIGATION_TIME
+    if src_ip in S().blocked_ips:
+        if S().mitigation_time is not None:
+            elapsed = time.time() - S().mitigation_time
             if elapsed < _DAMPENING_DURATION:
                 # Gradually reduce threat probability during dampening
                 threat_chance = max(0.0, 1.0 - (elapsed / _DAMPENING_DURATION))
@@ -162,35 +157,29 @@ def _generate_attack_event() -> dict:
 
 
 def set_attack_mode(active: bool):
-    global IS_ATTACK_ACTIVE, PROACTIVE_TRIGGERED
-    IS_ATTACK_ACTIVE = active
+    S().is_attack_active = active
     if not active:
-        PROACTIVE_TRIGGERED = False
+        S().proactive_triggered = False
     print(f"[SIMULATOR] Attack mode updated: {active}")
 
 
 def block_ips(ips: list[str]):
     """Add IPs to the global blocklist and record mitigation time."""
-    global _MITIGATION_TIME
-    global PROACTIVE_TRIGGERED
-    BLOCKED_IPS.update(ips)
-    _MITIGATION_TIME = time.time()
-    PROACTIVE_TRIGGERED = False  # a new incident after containment opens a new workspace
-    print(f"[SIMULATOR] Blocked IPs: {ips}  (total blocked: {len(BLOCKED_IPS)})")
+    S().blocked_ips.update(ips)
+    S().mitigation_time = time.time()
+    S().proactive_triggered = False  # a new incident after containment opens a new workspace
+    print(f"[SIMULATOR] Blocked IPs: {ips}  (total blocked: {len(S().blocked_ips)})")
 
 
 def unblock_all():
     """Clear the blocklist (used on reset/clear)."""
-    global _MITIGATION_TIME
-    global PROACTIVE_TRIGGERED
-    BLOCKED_IPS.clear()
-    _MITIGATION_TIME = None
-    PROACTIVE_TRIGGERED = False
+    S().blocked_ips.clear()
+    S().mitigation_time = None
+    S().proactive_triggered = False
     print("[SIMULATOR] All IPs unblocked")
 
 
 # Recent classified events, the only source for topology and containment targets.
-RECENT_EVENTS: deque = deque(maxlen=1000)
 TOPOLOGY_WINDOW_SECONDS = 600
 MAX_NODES_PER_GROUP = 6
 
@@ -206,10 +195,10 @@ def active_attackers(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> list[str]:
     """Sources of unblocked detections in the window, most recent first."""
     cutoff = time.time() - window_s
     seen: dict[str, None] = {}
-    for t, ev in reversed(RECENT_EVENTS):
+    for t, ev in reversed(S().recent_events):
         if t < cutoff:
             break
-        if ev["is_threat"] and ev["src_ip"] not in BLOCKED_IPS:
+        if ev["is_threat"] and ev["src_ip"] not in S().blocked_ips:
             seen.setdefault(ev["src_ip"], None)
     return list(seen)
 
@@ -218,8 +207,8 @@ def build_topology(window_s: float = TOPOLOGY_WINDOW_SECONDS) -> dict:
     """Nodes and edges from real recent detections. With no detections, only
     recently seen internal hosts are returned, marked clean."""
     cutoff = time.time() - window_s
-    recent = [ev for t, ev in RECENT_EVENTS if t >= cutoff]
-    threats = [ev for ev in recent if ev["is_threat"] and ev["src_ip"] not in BLOCKED_IPS]
+    recent = [ev for t, ev in S().recent_events if t >= cutoff]
+    threats = [ev for ev in recent if ev["is_threat"] and ev["src_ip"] not in S().blocked_ips]
 
     pairs: dict[tuple, dict] = {}
     for ev in threats:
@@ -263,14 +252,13 @@ async def process_event(manager, raw_event: dict) -> dict:
     """Classify one telemetry event, broadcast it, and mount the investigation
     workspace the first time a critical threat is seen. Used by both the built-in
     simulator and the POST /ingest endpoint fed by the Java ingestion service."""
-    global PROACTIVE_TRIGGERED
-    if raw_event["src_ip"] in BLOCKED_IPS:
+    if raw_event["src_ip"] in S().blocked_ips:
         return {"blocked": True, **raw_event}
-    event = detector.classify(raw_event)
-    RECENT_EVENTS.append((time.time(), event))
+    event = S().detector.classify(raw_event)
+    S().recent_events.append((time.time(), event))
     await manager.broadcast({"type": "telemetry", "data": event})
 
-    if event["is_threat"] and event["severity"] == "critical" and not PROACTIVE_TRIGGERED:
+    if event["is_threat"] and event["severity"] == "critical" and not S().proactive_triggered:
         import ws_handler
         ws_handler.reset_current_workspace(event)
         ws_handler.save_active_investigation()
@@ -282,29 +270,38 @@ async def process_event(manager, raw_event: dict) -> dict:
                 f"⚠️ **CRITICAL THREAT DETECTED: {event['attack_type']}**\n\n"
                 f"Source `{event['src_ip']}` → `{event['dst_ip']}:{event['port']}`, "
                 f"score **{event['score']}** (`{event['detector']}`). I have opened investigation "
-                f"workspace **{ws_handler.CURRENT_WORKSPACE['id']}** with topology, traffic and containment panels."
+                f"workspace **{S().current_workspace['id']}** with topology, traffic and containment panels."
             ),
         })
-        await manager.broadcast({"type": "workspace_mount", "workspace": ws_handler.CURRENT_WORKSPACE})
-        PROACTIVE_TRIGGERED = True
+        await manager.broadcast({"type": "workspace_mount", "workspace": S().current_workspace})
+        S().proactive_triggered = True
     return event
 
 
+async def _simulate_tick(manager):
+    """One 500 ms tick of simulated traffic for the active session."""
+    if S().is_attack_active:
+        await process_event(manager, _generate_attack_event())
+        for _ in range(random.randint(1, 2)):
+            await process_event(manager, _generate_baseline_event())
+    else:
+        for _ in range(random.randint(2, 4)):
+            await process_event(manager, _generate_baseline_event())
+
+
 async def anomaly_simulator(manager):
-    """Background task that generates telemetry every 500 ms when no real
-    ingestion source is connected."""
-    print("[SIMULATOR] Anomaly simulator started (500ms interval)")
+    """Background task: every 500 ms, generate telemetry for each connected
+    visitor's own session, unless the Java ingester is feeding real traffic."""
+    import session
+    print("[SIMULATOR] Anomaly simulator started (500ms interval, per session)")
     while True:
         try:
             ingest_live = time.time() - LAST_INGEST_AT < INGEST_TAKEOVER_SECONDS
-            if manager.active_connections and not ingest_live:
-                if IS_ATTACK_ACTIVE:
-                    await process_event(manager, _generate_attack_event())
-                    for _ in range(random.randint(1, 2)):
-                        await process_event(manager, _generate_baseline_event())
-                else:
-                    for _ in range(random.randint(2, 4)):
-                        await process_event(manager, _generate_baseline_event())
+            if not ingest_live:
+                for client_id in manager.connected_client_ids():
+                    with session.use_session(session.get_or_create(client_id)):
+                        await _simulate_tick(manager)
+            session.evict_idle(manager.connected_client_ids())
             await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             print("[SIMULATOR] Anomaly simulator stopped.")

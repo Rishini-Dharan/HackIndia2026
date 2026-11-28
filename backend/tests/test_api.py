@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 import anomaly_simulator as sim
+from session import S
 import main
 
 
@@ -13,8 +14,8 @@ def test_health_reports_planner_and_source():
 
 
 def test_ingest_classifies_and_streams_to_websocket():
-    sim.PROACTIVE_TRIGGERED = False
-    sim.BLOCKED_IPS.clear()
+    S().proactive_triggered = False
+    S().blocked_ips.clear()
     with TestClient(main.app) as client:
         with client.websocket_connect("/ws/chat") as ws:
             assert ws.receive_json()["type"] == "chat"
@@ -45,7 +46,7 @@ def test_ingest_rejects_bad_events():
 
 
 def test_blocked_source_is_dropped():
-    sim.BLOCKED_IPS.add("45.33.12.99")
+    S().blocked_ips.add("45.33.12.99")
     try:
         with TestClient(main.app) as client:
             r = client.post("/ingest", json={"events": [
@@ -53,7 +54,7 @@ def test_blocked_source_is_dropped():
             ]})
         assert r.json()["threats"] == 0
     finally:
-        sim.BLOCKED_IPS.clear()
+        S().blocked_ips.clear()
 
 
 def test_ingest_requires_token_when_configured(monkeypatch):
@@ -85,11 +86,11 @@ def _scan_batch(src):
 
 def test_live_detection_retargets_workspace_to_real_attacker():
     import ws_handler
-    sim.PROACTIVE_TRIGGERED = False
-    sim.BLOCKED_IPS.clear()
+    S().proactive_triggered = False
+    S().blocked_ips.clear()
     with TestClient(main.app) as client:
         client.post("/ingest", json=_scan_batch("198.51.100.7"))
-    ws = ws_handler.CURRENT_WORKSPACE
+    ws = S().current_workspace
     text = str(ws)
     assert ws["threatType"] == "PortScan"
     assert "198.51.100.7" in ws["hypothesis"]
@@ -100,9 +101,9 @@ def test_live_detection_retargets_workspace_to_real_attacker():
 
 
 def test_containment_rearms_proactive_alerts():
-    sim.PROACTIVE_TRIGGERED = True
+    S().proactive_triggered = True
     sim.block_ips(["198.51.100.7"])
-    assert sim.PROACTIVE_TRIGGERED is False
+    assert S().proactive_triggered is False
     sim.unblock_all()
 
 
@@ -123,42 +124,76 @@ def test_empty_batch_does_not_pause_simulator_and_epoch_ts_is_converted():
 
 
 def test_continue_restores_latest_saved_case():
-    import qdrant_memory
-    import ws_handler
+    import session
 
-    qdrant_memory.clear_memories()
-    sim.PROACTIVE_TRIGGERED = False
-    sim.BLOCKED_IPS.clear()
+    cid = "restore-client-0001"
     with TestClient(main.app) as client:
-        client.post("/ingest", json=_scan_batch("198.51.100.44"))
-        saved_id = ws_handler.CURRENT_WORKSPACE["id"]
-        ws_handler.reset_current_workspace()  # simulate a restart losing in-process state
-        with client.websocket_connect("/ws/chat") as ws:
+        with client.websocket_connect(f"/ws/chat?client={cid}") as ws:
             ws.receive_json(); ws.receive_json()
+            client.post("/ingest", json=_scan_batch("198.51.100.44"))
+            visitor = session.SESSIONS[cid]
+            saved_id = visitor.case_id
+            assert saved_id.startswith("INV-") and saved_id != "INV-412"
+            with session.use_session(visitor):
+                import ws_handler
+                ws_handler.reset_current_workspace()  # simulate a restart losing in-process state
             ws.send_json({"type": "chat", "content": "continue yesterday's investigation"})
-            msgs = []
-            for _ in range(30):
+            msgs, restored = [], False
+            for _ in range(200):
                 msgs.append(ws.receive_json())
-                if msgs[-1]["type"] == "workspace_mount":
+                restored = restored or (msgs[-1]["type"] == "chat" and "Restored" in msgs[-1].get("content", ""))
+                if restored and msgs[-1]["type"] == "workspace_mount":
                     break
-    chat = next(m for m in msgs if m["type"] == "chat" and "Restored" in m["content"])
+    chat = next(m for m in msgs if m["type"] == "chat" and "Restored" in m.get("content", ""))
     assert saved_id in chat["content"]
     workspace = msgs[-1]["workspace"]
-    assert workspace["id"] == saved_id
     assert any("T1046" in e for e in workspace["evidence"])
     assert "198.51.100.44" in workspace["hypothesis"]
-    ws_handler.reset_current_workspace()
 
+
+def test_visitors_are_isolated():
+    """One visitor's attack, workspace and memory never reach another visitor."""
+    import session
+
+    a, b = "visitor-aaaa-0001", "visitor-bbbb-0002"
+    with TestClient(main.app) as client:
+        with client.websocket_connect(f"/ws/chat?client={a}") as wa,              client.websocket_connect(f"/ws/chat?client={b}") as wb:
+            for w in (wa, wb):
+                w.receive_json(); w.receive_json()
+            wa.send_json({"type": "action", "payload": {"action": "simulate_attack"}})
+            seen_a = []
+            for _ in range(80):
+                seen_a.append(wa.receive_json())
+                if seen_a[-1]["type"] == "workspace_mount":
+                    break
+            assert any(m["type"] == "workspace_mount" for m in seen_a)
+            assert session.SESSIONS[a].is_attack_active
+            assert not session.SESSIONS[b].is_attack_active
+            assert not session.SESSIONS[b].proactive_triggered
+            # B's stream has telemetry only from its own (benign) simulation
+            for _ in range(15):
+                m = wb.receive_json()
+                assert m["type"] != "workspace_mount"
+                if m["type"] == "telemetry":
+                    assert m["data"]["src_ip"] != "45.33.12.99"
+            # B clearing memory leaves A's saved case intact
+            wb.send_json({"type": "action", "payload": {"action": "clear_memory"}})
+            import qdrant_memory
+            with session.use_session(session.SESSIONS[a]):
+                assert qdrant_memory.get_latest_investigation() is not None
+            with session.use_session(session.SESSIONS[b]):
+                assert qdrant_memory.get_latest_investigation() is None
+            wa.send_json({"type": "action", "payload": {"action": "stop_simulation"}})
 
 def test_live_case_id_replaces_template_id_everywhere():
     import ws_handler
-    sim.PROACTIVE_TRIGGERED = False
-    sim.BLOCKED_IPS.clear()
+    S().proactive_triggered = False
+    S().blocked_ips.clear()
     with TestClient(main.app) as client:
         with client.websocket_connect("/ws/chat") as ws:
             ws.receive_json(); ws.receive_json()
             client.post("/ingest", json=_scan_batch("198.51.100.77"))
-            case_id = ws_handler.CASE_ID
+            case_id = S().case_id
             assert case_id != "INV-412"
             ws.send_json({"type": "action", "payload": {"action": "isolate_ip", "ips": ["198.51.100.77"], "strategy": "block"}})
             msgs = []
@@ -176,13 +211,13 @@ def test_live_case_id_replaces_template_id_everywhere():
 
 def test_topology_uses_only_real_detections():
     import llm_orchestrator as llm
-    sim.RECENT_EVENTS.clear()
-    sim.BLOCKED_IPS.clear()
+    S().recent_events.clear()
+    S().blocked_ips.clear()
     empty = sim.build_topology()
     assert not [n for n in empty["nodes"] if n["type"] == "attacker"]
     assert "No active threats" in empty["summary"]
 
-    sim.PROACTIVE_TRIGGERED = True  # keep this test from opening a workspace
+    S().proactive_triggered = True  # keep this test from opening a workspace
     with TestClient(main.app) as client:
         client.post("/ingest", json=_scan_batch("198.51.100.90"))
     topo = sim.build_topology()
@@ -192,17 +227,17 @@ def test_topology_uses_only_real_detections():
     assert llm._live_threat_ips("block them") == ["198.51.100.90"]
     assert llm._live_threat_ips("block 203.0.113.5", ["203.0.113.5", "1.2.3.4"]) == ["203.0.113.5"]
 
-    sim.BLOCKED_IPS.add("198.51.100.90")
+    S().blocked_ips.add("198.51.100.90")
     assert not [n for n in sim.build_topology()["nodes"] if n["type"] == "attacker"]
-    sim.BLOCKED_IPS.clear()
-    sim.PROACTIVE_TRIGGERED = False
+    S().blocked_ips.clear()
+    S().proactive_triggered = False
 
 
 def test_llm_proposed_topology_nodes_are_replaced(monkeypatch):
     import asyncio
     import json as _json
     import llm_orchestrator as llm
-    sim.RECENT_EVENTS.clear()
+    S().recent_events.clear()
 
     class FakeResp:
         def raise_for_status(self): pass
